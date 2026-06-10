@@ -1,3 +1,4 @@
+process.chdir(__dirname);          // ensure dotenv and relative paths resolve correctly
 require('dotenv').config();
 
 const app = require('./src/app');

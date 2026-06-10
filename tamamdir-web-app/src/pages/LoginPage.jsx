@@ -1,16 +1,29 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Mail, Lock, CheckCircle2, Eye, EyeOff } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const { login } = useAuth()
   const navigate = useNavigate()
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
-    navigate('/home')
+    setError('')
+    setSubmitting(true)
+    try {
+      await login(email, password)
+      navigate('/home')
+    } catch (err) {
+      setError(err.message || 'Login failed. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -110,9 +123,13 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <button type="submit" className="btn-primary w-full justify-center py-3 text-base">
+              {error && (
+                <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-4 py-2">{error}</p>
+              )}
+
+              <button type="submit" disabled={submitting} className={`btn-primary w-full justify-center py-3 text-base ${submitting ? 'opacity-60 cursor-not-allowed' : ''}`}>
                 <CheckCircle2 className="w-4 h-4" />
-                Login
+                {submitting ? 'Logging in…' : 'Login'}
               </button>
 
               <div className="relative flex items-center">

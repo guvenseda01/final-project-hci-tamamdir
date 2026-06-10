@@ -1,10 +1,35 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CheckCircle2, Shield, DollarSign, ThumbsUp, Plus } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Shield, DollarSign, ThumbsUp, Plus, AlertCircle } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import ServiceCard from '../components/ServiceCard'
-import { services } from '../data/mockData'
+import api from '../lib/api'
+
+function ServiceCardSkeleton() {
+  return (
+    <div className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm animate-pulse">
+      <div className="h-44 bg-gray-200" />
+      <div className="p-4 space-y-2">
+        <div className="h-4 bg-gray-200 rounded w-3/4" />
+        <div className="h-3 bg-gray-200 rounded w-full" />
+        <div className="h-3 bg-gray-200 rounded w-1/2" />
+      </div>
+    </div>
+  )
+}
 
 export default function HomePage() {
+  const [services, setServices] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api.get('/api/services?limit=4&sort=rating')
+      .then(data => setServices(data.services))
+      .catch(err => setError(err.message || 'Failed to load services.'))
+      .finally(() => setLoading(false))
+  }, [])
+
   return (
     <div className="min-h-screen bg-white">
       <Navbar />
@@ -70,13 +95,20 @@ export default function HomePage() {
             </Link>
           </div>
 
+          {error && (
+            <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 mb-6">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span className="text-sm">{error}</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {services.map((service) => (
-              <ServiceCard key={service.id} service={service} />
-            ))}
+            {loading
+              ? Array.from({ length: 4 }).map((_, i) => <ServiceCardSkeleton key={i} />)
+              : services.map(service => <ServiceCard key={service.id} service={service} />)
+            }
           </div>
 
-          {/* Floating add button */}
           <div className="flex justify-end mt-4">
             <Link
               to="/profile"
@@ -97,21 +129,9 @@ export default function HomePage() {
 
           <div className="grid sm:grid-cols-3 gap-6 mb-10">
             {[
-              {
-                icon: Shield,
-                title: 'Campus Verified',
-                desc: 'Only users with @iyte.edu.tr emails can join.',
-              },
-              {
-                icon: DollarSign,
-                title: 'Fair Pricing',
-                desc: 'Student-friendly rates for premium help.',
-              },
-              {
-                icon: ThumbsUp,
-                title: 'Peer Reliable',
-                desc: 'Reviewed by your fellow classmates.',
-              },
+              { icon: Shield, title: 'Campus Verified', desc: 'Only users with @iyte.edu.tr emails can join.' },
+              { icon: DollarSign, title: 'Fair Pricing', desc: 'Student-friendly rates for premium help.' },
+              { icon: ThumbsUp, title: 'Peer Reliable', desc: 'Reviewed by your fellow classmates.' },
             ].map(({ icon: Icon, title, desc }) => (
               <div key={title} className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
                 <div className="w-10 h-10 bg-green-pale rounded-full flex items-center justify-center mx-auto mb-4">
@@ -122,7 +142,6 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-
         </section>
       </main>
     </div>

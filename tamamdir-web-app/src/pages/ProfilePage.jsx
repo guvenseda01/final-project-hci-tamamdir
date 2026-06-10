@@ -1,21 +1,55 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   CheckCircle2, User, Sliders, Wrench, Shield, Settings,
-  HelpCircle, LogOut, Bell, Trash2, Eye, Plus, AlertTriangle
+  HelpCircle, LogOut, Bell, Trash2, Eye, Plus, AlertTriangle,
+  Loader2, ShoppingBag, AlertCircle, Camera,
 } from 'lucide-react'
 import Navbar from '../components/Navbar'
-import { currentUser } from '../data/mockData'
+import { useAuth } from '../context/AuthContext'
+import api from '../lib/api'
+import { formatPrice } from '../lib/utils'
 
-const tabs = [
-  { id: 'personal', label: 'Personal Info', icon: User },
-  { id: 'personalization', label: 'Personalization', icon: Sliders },
-  { id: 'services', label: 'Service Management', icon: Wrench },
-  { id: 'security', label: 'Security', icon: Shield },
-  { id: 'account', label: 'Account Management', icon: Settings },
-]
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function PersonalInfo() {
+function formatDate(dateStr) {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+const STATUS_BADGE = {
+  pending:     { label: 'Pending',     cls: 'bg-yellow-100 text-yellow-700' },
+  accepted:    { label: 'Accepted',    cls: 'bg-blue-100 text-blue-700'     },
+  in_progress: { label: 'In Progress', cls: 'bg-orange-100 text-orange-700' },
+  completed:   { label: 'Completed',   cls: 'bg-green-100 text-green-700'   },
+  cancelled:   { label: 'Cancelled',   cls: 'bg-red-100 text-red-500'       },
+}
+
+// ── Tab: Personal Info ────────────────────────────────────────────────────────
+
+function PersonalInfo({ user, onAvatarUpdated }) {
+  const fileInputRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadError('')
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('avatar', file)
+      await api.post(`/api/users/${user.id}/avatar`, formData)
+      await onAvatarUpdated()
+    } catch (err) {
+      setUploadError(err.message || 'Upload failed.')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -24,30 +58,57 @@ function PersonalInfo() {
       </div>
 
       <div className="card p-6 space-y-5">
+        {/* Avatar */}
         <div className="flex items-center gap-4">
           <div className="relative">
-            <img src={currentUser.avatar} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-gray-100" />
-            <button className="absolute -bottom-1 -right-1 w-7 h-7 bg-green-primary rounded-full flex items-center justify-center border-2 border-white">
-              <User className="w-3.5 h-3.5 text-white" />
+            {user.avatar_url ? (
+              <img src={user.avatar_url} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-gray-100" />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-green-pale flex items-center justify-center border-2 border-gray-100">
+                <span className="text-green-primary font-bold text-2xl">{user.full_name?.[0] ?? '?'}</span>
+              </div>
+            )}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="absolute -bottom-1 -right-1 w-7 h-7 bg-green-primary rounded-full flex items-center justify-center border-2 border-white hover:bg-green-dark transition-colors disabled:opacity-60"
+            >
+              {uploading
+                ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                : <Camera className="w-3.5 h-3.5 text-white" />
+              }
             </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
           </div>
           <div>
-            <p className="font-semibold text-gray-900">{currentUser.fullName}</p>
-            <p className="text-sm text-gray-500">{currentUser.department}</p>
-            <div className="flex items-center gap-1.5 mt-1">
-              <CheckCircle2 className="w-4 h-4 text-green-primary" />
-              <span className="text-xs text-green-primary font-medium">Verified Student</span>
-            </div>
+            <p className="font-semibold text-gray-900">{user.full_name}</p>
+            <p className="text-sm text-gray-500">{user.department ?? 'No department set'}</p>
+            {user.is_verified === 1 && (
+              <div className="flex items-center gap-1.5 mt-1">
+                <CheckCircle2 className="w-4 h-4 text-green-primary" />
+                <span className="text-xs text-green-primary font-medium">Verified Student</span>
+              </div>
+            )}
           </div>
         </div>
 
+        {uploadError && (
+          <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{uploadError}</p>
+        )}
+
         {[
-          { label: 'Full Name', value: currentUser.fullName },
-          { label: 'Email', value: currentUser.email },
-          { label: 'Department', value: currentUser.department },
-          { label: 'Student ID', value: '300201049' },
+          { label: 'Full Name',   value: user.full_name },
+          { label: 'Email',       value: user.email },
+          { label: 'Department',  value: user.department ?? '—' },
+          { label: 'Bio',         value: user.bio ?? '—' },
         ].map(({ label, value }) => (
-          <div key={label} className="flex items-center justify-between py-3 border-b border-gray-50">
+          <div key={label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
             <div>
               <p className="text-xs text-gray-400 mb-0.5">{label}</p>
               <p className="text-sm font-medium text-gray-900">{value}</p>
@@ -60,8 +121,32 @@ function PersonalInfo() {
   )
 }
 
-function ServiceManagement() {
-  const [services, setServices] = useState(currentUser.activeServices)
+// ── Tab: Service Management ───────────────────────────────────────────────────
+
+function ServiceManagement({ userId }) {
+  const [services, setServices] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [removing, setRemoving] = useState(null)
+
+  useEffect(() => {
+    if (!userId) return
+    api.get(`/api/users/${userId}/services`)
+      .then(setServices)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [userId])
+
+  const handleRemove = async (id) => {
+    setRemoving(id)
+    try {
+      await api.del(`/api/services/${id}`)
+      setServices(prev => prev.filter(s => s.id !== id))
+    } catch {
+      // stay in list on error
+    } finally {
+      setRemoving(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -82,28 +167,44 @@ function ServiceManagement() {
           </button>
         </div>
 
-        <div className="space-y-3 mb-4">
-          {services.map((svc) => (
-            <div key={svc.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3.5">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-green-pale rounded-xl flex items-center justify-center">
-                  <CheckCircle2 className="w-4 h-4 text-green-primary" />
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-6 h-6 text-green-primary animate-spin" />
+          </div>
+        ) : services.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">
+            You haven't listed any services yet.
+          </p>
+        ) : (
+          <div className="space-y-3 mb-4">
+            {services.map(svc => (
+              <div key={svc.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3.5">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-green-pale rounded-xl flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-4 h-4 text-green-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{svc.title}</p>
+                    <p className="text-xs text-gray-400">
+                      {svc.category_name} · {formatPrice(svc.price, svc.price_unit)}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{svc.title}</p>
-                  <p className="text-xs text-gray-400">{svc.subtitle}</p>
-                </div>
+                <button
+                  onClick={() => handleRemove(svc.id)}
+                  disabled={removing === svc.id}
+                  className="flex items-center gap-1.5 text-red-400 hover:text-red-600 text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {removing === svc.id
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Trash2 className="w-4 h-4" />
+                  }
+                  Remove
+                </button>
               </div>
-              <button
-                onClick={() => setServices(services.filter((s) => s.id !== svc.id))}
-                className="flex items-center gap-1.5 text-red-400 hover:text-red-600 text-sm font-medium transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         <p className="text-xs text-center text-gray-400 py-2 bg-gray-50 rounded-lg">
           Tip: Offering high-quality services helps you earn higher ratings and peer trust.
@@ -128,7 +229,142 @@ function ServiceManagement() {
   )
 }
 
-function AccountManagement() {
+// ── Tab: Orders ───────────────────────────────────────────────────────────────
+
+function OrdersTab({ userId }) {
+  const [role, setRole] = useState('buyer')
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!userId) return
+    setLoading(true)
+    setError('')
+    api.get(`/api/users/${userId}/orders?role=${role}`)
+      .then(setOrders)
+      .catch(err => setError(err.message || 'Failed to load orders.'))
+      .finally(() => setLoading(false))
+  }, [userId, role])
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">Orders</h2>
+        <p className="text-gray-500 text-sm">Track your orders as a buyer and provider.</p>
+      </div>
+
+      {/* Role toggle */}
+      <div className="flex gap-2">
+        {['buyer', 'provider'].map(r => (
+          <button
+            key={r}
+            onClick={() => setRole(r)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
+              role === r ? 'bg-green-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            As {r}
+          </button>
+        ))}
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <span className="text-sm">{error}</span>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="w-6 h-6 text-green-primary animate-spin" />
+        </div>
+      ) : orders.length === 0 ? (
+        <div className="card p-8 text-center">
+          <ShoppingBag className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-400 text-sm">No orders yet as a {role}.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {orders.map(order => {
+            const badge = STATUS_BADGE[order.status] ?? { label: order.status, cls: 'bg-gray-100 text-gray-600' }
+            const other = role === 'buyer' ? order.provider_name : order.buyer_name
+            return (
+              <div key={order.id} className="card p-4 flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 text-sm truncate">{order.service_title}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {role === 'buyer' ? 'Provider' : 'Buyer'}: {other} · {formatDate(order.created_at)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-sm font-semibold text-gray-900">
+                    ₺{order.price_at_order}
+                  </span>
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.cls}`}>
+                    {badge.label}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Tab: Personalization ──────────────────────────────────────────────────────
+
+function PersonalizationTab() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">Personalization</h2>
+        <p className="text-gray-500 text-sm">Customize your experience on Tamamdır.</p>
+      </div>
+      <div className="card p-6">
+        <p className="text-sm text-gray-500 mb-4">Update your interest categories to get better service recommendations.</p>
+        <Link to="/onboarding" className="btn-primary inline-flex">
+          <Sliders className="w-4 h-4" />
+          Update Interests
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+// ── Tab: Security ─────────────────────────────────────────────────────────────
+
+function SecurityTab() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">Security</h2>
+        <p className="text-gray-500 text-sm">Manage your account security settings.</p>
+      </div>
+      <div className="card p-6 space-y-4">
+        {[
+          { label: 'Login Sessions',       desc: '2 active sessions',          action: 'View All' },
+          { label: 'Login Notifications',  desc: 'Get notified on new logins', action: 'Enable'   },
+        ].map(({ label, desc, action }) => (
+          <div key={label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
+            <div>
+              <p className="text-sm font-medium text-gray-900">{label}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
+            </div>
+            <button className="text-sm font-semibold text-green-primary hover:underline">{action}</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Tab: Account Management ───────────────────────────────────────────────────
+
+function AccountManagement({ user }) {
   return (
     <div className="space-y-6">
       <div>
@@ -144,11 +380,13 @@ function AccountManagement() {
         <div className="bg-gray-50 rounded-xl p-4">
           <p className="text-xs text-gray-400 mb-1">University Email</p>
           <div className="flex items-center gap-3">
-            <p className="text-sm font-semibold text-gray-900">{currentUser.email}</p>
-            <span className="flex items-center gap-1 bg-green-pale text-green-primary text-xs font-semibold px-2.5 py-0.5 rounded-full">
-              <CheckCircle2 className="w-3 h-3" />
-              Verified
-            </span>
+            <p className="text-sm font-semibold text-gray-900">{user.email}</p>
+            {user.is_verified === 1 && (
+              <span className="flex items-center gap-1 bg-green-pale text-green-primary text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                <CheckCircle2 className="w-3 h-3" />
+                Verified
+              </span>
+            )}
           </div>
           <p className="text-xs text-gray-400 mt-2">This email is required for campus verification and cannot be changed.</p>
         </div>
@@ -160,8 +398,8 @@ function AccountManagement() {
           <h3 className="font-semibold text-gray-900 text-sm">Account Security</h3>
         </div>
         {[
-          { label: 'Password', desc: 'Last changed 3 months ago', action: 'Change' },
-          { label: 'Two-Factor Authentication (2FA)', desc: <span>Currently <span className="text-red-400 font-medium">disabled</span>. Add an extra layer of security.</span>, action: 'Manage' },
+          { label: 'Password', desc: 'Update your password', action: 'Change' },
+          { label: 'Two-Factor Authentication (2FA)', desc: <span>Currently <span className="text-red-400 font-medium">disabled</span>.</span>, action: 'Manage' },
         ].map(({ label, desc, action }) => (
           <div key={label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
             <div>
@@ -183,11 +421,15 @@ function AccountManagement() {
         <p className="text-sm text-gray-500">Control how your data is used and stored within the Tamamdır platform.</p>
         <div className="grid grid-cols-2 gap-3">
           <button className="btn-outline text-sm py-2.5 flex items-center justify-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
             Export My Data
           </button>
           <button className="btn-outline text-sm py-2.5 flex items-center justify-center gap-2 text-gray-500">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
             Delete Account History
           </button>
         </div>
@@ -199,7 +441,7 @@ function AccountManagement() {
           <h3 className="font-semibold text-red-500 text-sm">Danger Zone</h3>
         </div>
         <p className="text-sm text-gray-500 mb-4">
-          Deactivating your account will immediately hide your profile and active service listings. You will not be able to log in or receive messages.
+          Deactivating your account will immediately hide your profile and active service listings.
         </p>
         <button className="flex items-center gap-2 border border-red-300 text-red-400 hover:bg-red-50 transition-colors text-sm font-semibold px-4 py-2.5 rounded-lg">
           <AlertTriangle className="w-4 h-4" />
@@ -210,60 +452,44 @@ function AccountManagement() {
   )
 }
 
-function SecurityTab() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Security</h2>
-        <p className="text-gray-500 text-sm">Manage your account security settings.</p>
-      </div>
-      <div className="card p-6 space-y-4">
-        {[
-          { label: 'Login Sessions', desc: '2 active sessions', action: 'View All' },
-          { label: 'Login Notifications', desc: 'Get notified on new logins', action: 'Enable' },
-        ].map(({ label, desc, action }) => (
-          <div key={label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
-            <div>
-              <p className="text-sm font-medium text-gray-900">{label}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
-            </div>
-            <button className="text-sm font-semibold text-green-primary hover:underline">{action}</button>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
+// ── Page ──────────────────────────────────────────────────────────────────────
 
-function PersonalizationTab() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Personalization</h2>
-        <p className="text-gray-500 text-sm">Customize your experience on Tamamdır.</p>
-      </div>
-      <div className="card p-6">
-        <p className="text-sm text-gray-500 mb-4">Update your interest categories to get better service recommendations.</p>
-        <Link to="/onboarding" className="btn-primary inline-flex">
-          <Sliders className="w-4 h-4" />
-          Update Interests
-        </Link>
-      </div>
-    </div>
-  )
-}
+const TABS = [
+  { id: 'personal',        label: 'Personal Info',       icon: User       },
+  { id: 'personalization', label: 'Personalization',     icon: Sliders    },
+  { id: 'services',        label: 'Service Management',  icon: Wrench     },
+  { id: 'orders',          label: 'Orders',              icon: ShoppingBag },
+  { id: 'security',        label: 'Security',            icon: Shield     },
+  { id: 'account',         label: 'Account Management',  icon: Settings   },
+]
 
 export default function ProfilePage() {
+  const { user, logout, me } = useAuth()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('services')
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-green-primary animate-spin" />
+      </div>
+    )
+  }
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'personal': return <PersonalInfo />
+      case 'personal':        return <PersonalInfo user={user} onAvatarUpdated={me} />
       case 'personalization': return <PersonalizationTab />
-      case 'services': return <ServiceManagement />
-      case 'security': return <SecurityTab />
-      case 'account': return <AccountManagement />
-      default: return <ServiceManagement />
+      case 'services':        return <ServiceManagement userId={user.id} />
+      case 'orders':          return <OrdersTab userId={user.id} />
+      case 'security':        return <SecurityTab />
+      case 'account':         return <AccountManagement user={user} />
+      default:                return <ServiceManagement userId={user.id} />
     }
   }
 
@@ -278,27 +504,39 @@ export default function ProfilePage() {
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="p-6 text-center border-b border-gray-100">
                 <div className="relative inline-block mb-3">
-                  <img
-                    src={currentUser.avatar}
-                    alt=""
-                    className="w-20 h-20 rounded-full object-cover border-4 border-gray-50 shadow-sm"
-                  />
-                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-primary rounded-full flex items-center justify-center border-2 border-white">
-                    <CheckCircle2 className="w-3 h-3 text-white" strokeWidth={3} />
+                  {user.avatar_url ? (
+                    <img
+                      src={user.avatar_url}
+                      alt=""
+                      className="w-20 h-20 rounded-full object-cover border-4 border-gray-50 shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-green-pale flex items-center justify-center border-4 border-gray-50 shadow-sm">
+                      <span className="text-green-primary font-bold text-2xl">{user.full_name?.[0] ?? '?'}</span>
+                    </div>
+                  )}
+                  {user.is_verified === 1 && (
+                    <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-primary rounded-full flex items-center justify-center border-2 border-white">
+                      <CheckCircle2 className="w-3 h-3 text-white" strokeWidth={3} />
+                    </div>
+                  )}
+                </div>
+                <p className="font-semibold text-gray-900 text-sm">
+                  {user.full_name?.split(' ')[0]} Profile
+                </p>
+                {user.is_verified === 1 && (
+                  <div className="flex items-center justify-center gap-1 mt-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-primary" />
+                    <span className="text-xs text-green-primary font-medium">Verified Student</span>
                   </div>
-                </div>
-                <p className="font-semibold text-gray-900 text-sm">{currentUser.name.split(' ')[0]} Profile</p>
-                <div className="flex items-center justify-center gap-1 mt-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-green-primary" />
-                  <span className="text-xs text-green-primary font-medium">Verified Student</span>
-                </div>
+                )}
                 <button className="mt-3 w-full bg-green-primary text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-green-dark transition-colors">
                   Upgrade to Pro
                 </button>
               </div>
 
               <nav className="p-3 space-y-1">
-                {tabs.map(({ id, label, icon: Icon }) => (
+                {TABS.map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
                     onClick={() => setActiveTab(id)}
@@ -319,13 +557,13 @@ export default function ProfilePage() {
                   <HelpCircle className="w-4 h-4" />
                   Help Center
                 </button>
-                <Link
-                  to="/login"
+                <button
+                  onClick={handleLogout}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-50 transition-colors"
                 >
                   <LogOut className="w-4 h-4" />
                   Logout
-                </Link>
+                </button>
               </div>
             </div>
           </aside>

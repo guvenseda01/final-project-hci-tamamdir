@@ -1,20 +1,36 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CheckCircle2, Eye, EyeOff, Info, Users, BookOpen, Shield } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [agreed, setAgreed] = useState(false)
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const { register } = useAuth()
   const navigate = useNavigate()
 
-  const isIyte = form.email.endsWith('@iyte.edu.tr')
+  const isIyte = form.email.endsWith('@iyte.edu.tr') || form.email.endsWith('@std.iyte.edu.tr')
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value })
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    navigate('/onboarding')
+    if (form.password.length < 8) { setError('Password must be at least 8 characters.'); return }
+    if (form.password !== form.confirm) { setError("Passwords don't match."); return }
+    setError('')
+    setSubmitting(true)
+    try {
+      const data = await register(form.name, form.email, form.password)
+      navigate(data.needs_interests ? '/onboarding' : '/home')
+    } catch (err) {
+      const apiErrors = err.data?.errors
+      setError(apiErrors ? apiErrors[0].msg : (err.message || 'Registration failed.'))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -148,6 +164,9 @@ export default function RegisterPage() {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {form.password && form.password.length < 8 && (
+                  <p className="text-xs text-red-400 mt-1">Password must be at least 8 characters.</p>
+                )}
               </div>
 
               <div>
@@ -181,13 +200,17 @@ export default function RegisterPage() {
                 </label>
               </div>
 
+              {error && (
+                <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-4 py-2">{error}</p>
+              )}
+
               <button
                 type="submit"
-                disabled={!agreed}
-                className={`btn-primary w-full justify-center py-3 text-base mt-2 ${!agreed ? 'opacity-60 cursor-not-allowed' : ''}`}
+                disabled={!agreed || submitting}
+                className={`btn-primary w-full justify-center py-3 text-base mt-2 ${!agreed || submitting ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 <CheckCircle2 className="w-5 h-5" />
-                Join Tamamdır!
+                {submitting ? 'Creating account…' : 'Join Tamamdır!'}
               </button>
             </form>
 
