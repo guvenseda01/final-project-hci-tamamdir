@@ -1,0 +1,10 @@
+node_modules/
+.env
+tamamdir.db
+uploads/avatars/*
+uploads/services/*
+uploads/portfolios/*
+!uploads/avatars/.gitkeep
+!uploads/services/.gitkeep
+!uploads/portfolios/.gitkeep
+*.log
