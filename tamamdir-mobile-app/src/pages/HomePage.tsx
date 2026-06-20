@@ -2,12 +2,12 @@ import { useNavigate } from "react-router-dom";
 import TopBar from "../components/TopBar";
 import BottomNav from "../components/BottomNav";
 import ServiceCard from "../components/ServiceCard";
-import { SERVICES } from "../data/mockData";
-
-const POPULAR = SERVICES.slice(0, 3);
+import { useServices } from "../context/ServicesContext";
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const { services, loading } = useServices();
+  const popular = services.slice(0, 3);
 
   return (
     <div className="bg-background min-h-screen max-w-md mx-auto">
@@ -71,9 +71,13 @@ export default function HomePage() {
             </button>
           </div>
           <div className="flex flex-col gap-gutter">
-            {POPULAR.map((s) => (
-              <ServiceCard key={s.id} service={s} />
-            ))}
+            {loading ? (
+              [1, 2, 3].map((i) => (
+                <div key={i} className="h-32 bg-surface-container-low rounded-2xl animate-pulse" />
+              ))
+            ) : (
+              popular.map((s) => <ServiceCard key={s.id} service={s} />)
+            )}
           </div>
         </section>
 

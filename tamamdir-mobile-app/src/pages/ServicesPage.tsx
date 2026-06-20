@@ -3,12 +3,15 @@ import { useNavigate } from "react-router-dom";
 import TopBar from "../components/TopBar";
 import BottomNav from "../components/BottomNav";
 import ServiceCard from "../components/ServiceCard";
-import { CATEGORIES } from "../data/mockData";
 import { useServices } from "../context/ServicesContext";
 
 export default function ServicesPage() {
   const navigate = useNavigate();
   const { services } = useServices();
+  const CATEGORIES = useMemo(() => {
+    const cats = Array.from(new Set(services.map((s) => s.category)));
+    return ["Tümü", ...cats];
+  }, [services]);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("Tümü");
 

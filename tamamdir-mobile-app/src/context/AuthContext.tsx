@@ -1,40 +1,90 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
-import { CURRENT_USER } from "../data/mockData";
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import api from "../lib/api";
 import type { User } from "../data/types";
+
+interface ApiUser {
+  id: string;
+  full_name: string;
+  email: string;
+  avatar_url: string | null;
+  is_verified: 0 | 1;
+  department: string | null;
+  bio: string | null;
+  rating: number;
+  review_count: number;
+}
+
+function mapUser(u: ApiUser): User {
+  return {
+    id: u.id,
+    name: u.full_name,
+    email: u.email,
+    department: u.department ?? "",
+    year: "",
+    avatar: u.avatar_url ?? `https://i.pravatar.cc/150?u=${u.id}`,
+    verified: u.is_verified === 1,
+    rating: u.rating ?? 0,
+    completedServices: 0,
+    activeServices: 0,
+  };
+}
 
 interface AuthContextType {
   user: User | null;
   isLoggedIn: boolean;
-  login: (email: string) => void;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   isLoggedIn: false,
-  login: () => {},
+  loading: true,
+  login: async () => {},
+  register: async () => {},
   logout: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem("tamamdir_auth") === "true";
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const user = isLoggedIn ? CURRENT_USER : null;
+  const fetchMe = useCallback(async () => {
+    const data: ApiUser = await api.get('/api/auth/me');
+    setUser(mapUser(data));
+  }, []);
 
-  function login(_email: string) {
-    localStorage.setItem("tamamdir_auth", "true");
-    setIsLoggedIn(true);
+  useEffect(() => {
+    if (!localStorage.getItem('token')) {
+      setLoading(false);
+      return;
+    }
+    fetchMe()
+      .catch(() => localStorage.removeItem('token'))
+      .finally(() => setLoading(false));
+  }, [fetchMe]);
+
+  async function login(email: string, password: string) {
+    const data = await api.post('/api/auth/login', { email, password });
+    localStorage.setItem('token', data.token);
+    setUser(mapUser(data.user));
+  }
+
+  async function register(name: string, email: string, password: string) {
+    const data = await api.post('/api/auth/register', { full_name: name, email, password });
+    localStorage.setItem('token', data.token);
+    setUser(mapUser(data.user));
   }
 
   function logout() {
-    localStorage.removeItem("tamamdir_auth");
-    setIsLoggedIn(false);
+    localStorage.removeItem('token');
+    setUser(null);
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoggedIn: !!user, loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
