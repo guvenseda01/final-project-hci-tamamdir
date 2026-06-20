@@ -15,11 +15,19 @@ export default function AccountPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
-  const [notifSettings, setNotifSettings] = useState([
+  const DEFAULT_NOTIFS = [
     { label: "Mesaj bildirimleri", sub: "Yeni mesaj geldiğinde bildir", on: true },
     { label: "Hizmet güncellemeleri", sub: "Rezervasyon değişikliklerinde bildir", on: true },
     { label: "Promosyonlar", sub: "Kampanya ve fırsatlardan haberdar ol", on: false },
-  ]);
+  ];
+  const [notifSettings, setNotifSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem("notifSettings");
+      return saved ? JSON.parse(saved) : DEFAULT_NOTIFS;
+    } catch {
+      return DEFAULT_NOTIFS;
+    }
+  });
 
   const [form, setForm] = useState({
     name: user?.name || "",
@@ -30,7 +38,11 @@ export default function AccountPage() {
   const [iyteEmailError, setIyteEmailError] = useState("");
 
   function toggleNotif(index: number) {
-    setNotifSettings((prev) => prev.map((n, i) => i === index ? { ...n, on: !n.on } : n));
+    setNotifSettings((prev) => {
+      const updated = prev.map((n, i) => i === index ? { ...n, on: !n.on } : n);
+      localStorage.setItem("notifSettings", JSON.stringify(updated));
+      return updated;
+    });
   }
 
   function showToast(msg: string) {
