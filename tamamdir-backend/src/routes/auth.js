@@ -565,9 +565,20 @@ router.post(
  */
 
 // ── POST /api/auth/resend-verification ──────────────────────────────────────
-router.post('/resend-verification', requireAuth, async (req, res, next) => {
+router.post('/resend-verification', async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const userRecord = await get('SELECT id FROM users WHERE email = ?', [email]);
+    if (!userRecord) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userId = userRecord.id;
     const now = Date.now();
     const lastRequest = resendVerificationLimiter.get(userId);
 
