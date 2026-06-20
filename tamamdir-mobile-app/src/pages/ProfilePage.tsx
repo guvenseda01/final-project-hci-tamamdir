@@ -25,7 +25,6 @@ export default function ProfilePage() {
 
   const accountRows: SettingsRow[] = [
     { icon: "person", label: "Kişisel Bilgiler", sub: "Ad, E-posta, Öğrenci No", to: "/account" },
-    { icon: "manage_accounts", label: "Profil Yönetimi", sub: "Hizmetler, Kimlik, Ödeme", to: "/profile/manage" },
     { icon: "edit_attributes", label: "Kişiselleştirme", sub: "Tema, Dil, Erişilebilirlik", to: "/personalization" },
   ];
 
