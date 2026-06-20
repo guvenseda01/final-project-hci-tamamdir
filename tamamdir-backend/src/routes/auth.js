@@ -151,6 +151,33 @@ const { v4: uuidv4 } = require('uuid');
 
 const { run, get } = require('../config/database');
 const { signToken, requireAuth } = require('../middleware/auth');
+const { sendVerificationEmail } = require('../services/email');
+const {
+  generateCode,
+  hashCode,
+  getExpiryDate,
+  isExpired,
+  CODE_TTL_MINUTES,
+} = require('../services/verification');
+
+// Keep Gmail dots — Resend test mode matches the exact account email
+const EMAIL_NORM = { gmail_remove_dots: false, gmail_remove_subaddress: false };
+
+async function createAndSendVerificationCode(user) {
+  const code = generateCode();
+  const codeHash = hashCode(code);
+  const expiresAt = getExpiryDate();
+
+  await run('DELETE FROM email_verifications WHERE user_id = ?', [user.id]);
+  await run(
+    `INSERT INTO email_verifications (id, user_id, code_hash, expires_at)
+     VALUES (?, ?, ?, ?)`,
+    [uuidv4(), user.id, codeHash, expiresAt.toISOString()]
+  );
+
+  await sendVerificationEmail(user.email, code);
+  return code;
+}
 
 // ── POST /api/auth/register ─────────────────────────────────────────────────
 router.post(
@@ -160,7 +187,7 @@ router.post(
     body('email')
       .trim()
       .isEmail().withMessage('Valid e-mail required')
-      .normalizeEmail(),
+      .normalizeEmail(EMAIL_NORM),
     body('password')
       .isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
   ],
@@ -178,25 +205,24 @@ router.post(
         return res.status(409).json({ error: 'E-mail already registered' });
       }
 
-      // Auto-verify IYTE university emails
-      const isVerified = email.endsWith('@iyte.edu.tr') || email.endsWith('@std.iyte.edu.tr') ? 1 : 0;
-
+      // All new accounts require email verification
       const id           = uuidv4();
       const passwordHash = await bcrypt.hash(password, 12);
 
       await run(
         `INSERT INTO users (id, full_name, email, password_hash, is_verified)
-         VALUES (?, ?, ?, ?, ?)`,
-        [id, full_name, email, passwordHash, isVerified]
+         VALUES (?, ?, ?, ?, 0)`,
+        [id, full_name, email, passwordHash]
       );
 
-      const user  = await get('SELECT * FROM users WHERE id = ?', [id]);
-      const token = signToken({ id: user.id, email: user.email });
+      const user = await get('SELECT * FROM users WHERE id = ?', [id]);
+      await createAndSendVerificationCode(user);
 
       return res.status(201).json({
-        token,
-        user: sanitizeUser(user),
-        needs_interests: true, // prompt the interests-selection screen
+        message: 'Verification code sent to your email',
+        email: user.email,
+        needs_verification: true,
+        expires_in_minutes: CODE_TTL_MINUTES,
       });
     } catch (err) {
       next(err);
@@ -208,7 +234,7 @@ router.post(
 router.post(
   '/login',
   [
-    body('email').trim().isEmail().normalizeEmail(),
+    body('email').trim().isEmail().normalizeEmail(EMAIL_NORM),
     body('password').notEmpty(),
   ],
   async (req, res, next) => {
@@ -230,8 +256,118 @@ router.post(
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
+      if (!user.is_verified) {
+        return res.status(403).json({
+          error: 'Email not verified',
+          needs_verification: true,
+          email: user.email,
+        });
+      }
+
       const token = signToken({ id: user.id, email: user.email });
       return res.json({ token, user: sanitizeUser(user) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── POST /api/auth/verify-email ───────────────────────────────────────────────
+router.post(
+  '/verify-email',
+  [
+    body('email').trim().isEmail().normalizeEmail(EMAIL_NORM),
+    body('code').trim().isLength({ min: 6, max: 6 }).withMessage('Code must be 6 digits'),
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ errors: errors.array() });
+    }
+
+    try {
+      const { email, code } = req.body;
+      const user = await get('SELECT * FROM users WHERE email = ?', [email]);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (user.is_verified) {
+        const token = signToken({ id: user.id, email: user.email });
+        return res.json({
+          message: 'Email already verified',
+          token,
+          user: sanitizeUser(user),
+          needs_interests: true,
+        });
+      }
+
+      const record = await get(
+        `SELECT * FROM email_verifications
+         WHERE user_id = ?
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [user.id]
+      );
+
+      if (!record) {
+        return res.status(400).json({ error: 'No verification code found. Please register again or resend.' });
+      }
+
+      if (isExpired(record.expires_at)) {
+        return res.status(400).json({ error: 'Verification code expired. Please request a new code.' });
+      }
+
+      if (record.code_hash !== hashCode(code)) {
+        return res.status(400).json({ error: 'Invalid verification code' });
+      }
+
+      await run('UPDATE users SET is_verified = 1, updated_at = NOW() WHERE id = ?', [user.id]);
+      await run('DELETE FROM email_verifications WHERE user_id = ?', [user.id]);
+
+      const updated = await get('SELECT * FROM users WHERE id = ?', [user.id]);
+      const token = signToken({ id: updated.id, email: updated.email });
+
+      return res.json({
+        message: 'Email verified successfully',
+        token,
+        user: sanitizeUser(updated),
+        needs_interests: true,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── POST /api/auth/resend-verification ──────────────────────────────────────
+router.post(
+  '/resend-verification',
+  [body('email').trim().isEmail().normalizeEmail(EMAIL_NORM)],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ errors: errors.array() });
+    }
+
+    try {
+      const { email } = req.body;
+      const user = await get('SELECT * FROM users WHERE email = ?', [email]);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (user.is_verified) {
+        return res.status(400).json({ error: 'Email is already verified' });
+      }
+
+      await createAndSendVerificationCode(user);
+
+      return res.json({
+        message: 'Verification code sent',
+        email: user.email,
+        expires_in_minutes: CODE_TTL_MINUTES,
+      });
     } catch (err) {
       next(err);
     }
