@@ -266,7 +266,7 @@ router.patch(
 
       if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
-      updates.push("updated_at = NOW()");
+      updates.push("updated_at = datetime('now')");
       values.push(req.params.id);
 
       await run(

@@ -1,26 +1,36 @@
-const { Pool } = require('pg');
+const path = require('path');
+const { DatabaseSync } = require('node:sqlite');
 
-let pool;
+let db;
 
-// Convert SQLite ? placeholders to PostgreSQL $1, $2, … notation
-function toPostgres(sql) {
-  let i = 0;
-  return sql.replace(/\?/g, () => `$${++i}`);
+function run(sql, params = []) {
+  try {
+    const stmt   = db.prepare(sql);
+    const result = stmt.run(...params);
+    return Promise.resolve({ lastID: result.lastInsertRowid, changes: result.changes });
+  } catch (err) {
+    return Promise.reject(err);
+  }
 }
 
-async function run(sql, params = []) {
-  const result = await pool.query(toPostgres(sql), params);
-  return { rowCount: result.rowCount };
+function get(sql, params = []) {
+  try {
+    const stmt = db.prepare(sql);
+    const row  = stmt.get(...params);
+    return Promise.resolve(row ?? null);
+  } catch (err) {
+    return Promise.reject(err);
+  }
 }
 
-async function get(sql, params = []) {
-  const result = await pool.query(toPostgres(sql), params);
-  return result.rows[0] ?? null;
-}
-
-async function all(sql, params = []) {
-  const result = await pool.query(toPostgres(sql), params);
-  return result.rows;
+function all(sql, params = []) {
+  try {
+    const stmt = db.prepare(sql);
+    const rows = stmt.all(...params);
+    return Promise.resolve(rows);
+  } catch (err) {
+    return Promise.reject(err);
+  }
 }
 
 const SCHEMA_STATEMENTS = [
@@ -39,8 +49,8 @@ const SCHEMA_STATEMENTS = [
     total_earnings   REAL DEFAULT 0.0,
     rating           REAL DEFAULT 0.0,
     review_count     INTEGER DEFAULT 0,
-    created_at       TIMESTAMPTZ DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ DEFAULT NOW()
+    created_at       TEXT DEFAULT (datetime('now')),
+    updated_at       TEXT DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS categories (
     id    TEXT PRIMARY KEY,
@@ -66,8 +76,8 @@ const SCHEMA_STATEMENTS = [
     rating        REAL DEFAULT 0.0,
     review_count  INTEGER DEFAULT 0,
     order_count   INTEGER DEFAULT 0,
-    created_at    TIMESTAMPTZ DEFAULT NOW(),
-    updated_at    TIMESTAMPTZ DEFAULT NOW()
+    created_at    TEXT DEFAULT (datetime('now')),
+    updated_at    TEXT DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS service_images (
     id         TEXT PRIMARY KEY,
@@ -75,7 +85,7 @@ const SCHEMA_STATEMENTS = [
     image_url  TEXT NOT NULL,
     is_cover   INTEGER DEFAULT 0,
     sort_order INTEGER DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TEXT DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS orders (
     id              TEXT PRIMARY KEY,
@@ -85,20 +95,20 @@ const SCHEMA_STATEMENTS = [
     status          TEXT NOT NULL DEFAULT 'pending',
     price_at_order  REAL NOT NULL,
     note            TEXT,
-    scheduled_at    TIMESTAMPTZ,
-    completed_at    TIMESTAMPTZ,
-    cancelled_at    TIMESTAMPTZ,
+    scheduled_at    TEXT,
+    completed_at    TEXT,
+    cancelled_at    TEXT,
     cancel_reason   TEXT,
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ DEFAULT NOW()
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS conversations (
     id            TEXT PRIMARY KEY,
     participant_a TEXT NOT NULL REFERENCES users(id),
     participant_b TEXT NOT NULL REFERENCES users(id),
     last_message  TEXT,
-    last_msg_at   TIMESTAMPTZ,
-    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    last_msg_at   TEXT,
+    created_at    TEXT DEFAULT (datetime('now')),
     UNIQUE (participant_a, participant_b)
   )`,
   `CREATE TABLE IF NOT EXISTS messages (
@@ -107,7 +117,7 @@ const SCHEMA_STATEMENTS = [
     sender_id       TEXT NOT NULL REFERENCES users(id),
     content         TEXT NOT NULL,
     is_read         INTEGER DEFAULT 0,
-    created_at      TIMESTAMPTZ DEFAULT NOW()
+    created_at      TEXT DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS reviews (
     id          TEXT PRIMARY KEY,
@@ -117,7 +127,7 @@ const SCHEMA_STATEMENTS = [
     provider_id TEXT NOT NULL REFERENCES users(id),
     rating      INTEGER NOT NULL,
     comment     TEXT,
-    created_at  TIMESTAMPTZ DEFAULT NOW()
+    created_at  TEXT DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS notifications (
     id         TEXT PRIMARY KEY,
@@ -127,7 +137,7 @@ const SCHEMA_STATEMENTS = [
     body       TEXT,
     is_read    INTEGER DEFAULT 0,
     ref_id     TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TEXT DEFAULT (datetime('now'))
   )`,
   `CREATE INDEX IF NOT EXISTS idx_services_provider ON services(provider_id)`,
   `CREATE INDEX IF NOT EXISTS idx_services_category ON services(category_id)`,
@@ -141,7 +151,7 @@ const SCHEMA_STATEMENTS = [
 async function seed() {
   const { v4: uuidv4 } = require('uuid');
   const row = await get('SELECT COUNT(*) AS n FROM categories');
-  if (row && parseInt(row.n) > 0) return;
+  if (row && row.n > 0) return;
 
   const cats = [
     { name: 'Coding Lessons',     icon: 'code',              slug: 'coding-lessons'     },
@@ -160,7 +170,7 @@ async function seed() {
 
   for (const c of cats) {
     await run(
-      'INSERT INTO categories (id,name,icon,slug) VALUES (?,?,?,?) ON CONFLICT DO NOTHING',
+      'INSERT OR IGNORE INTO categories (id,name,icon,slug) VALUES (?,?,?,?)',
       [uuidv4(), c.name, c.icon, c.slug]
     );
   }
@@ -168,14 +178,16 @@ async function seed() {
 }
 
 async function initDB() {
-  pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const dbPath = path.resolve(__dirname, '../../tamamdir.db');
+  db = new DatabaseSync(dbPath);
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
   for (const stmt of SCHEMA_STATEMENTS) {
-    await pool.query(stmt);
+    db.exec(stmt);
   }
 
   await seed();
-  console.log(`📦  PostgreSQL connected: ${process.env.DATABASE_URL}`);
+  console.log(`📦  SQLite connected: ${dbPath}`);
 }
 
 module.exports = { initDB, run, get, all };
