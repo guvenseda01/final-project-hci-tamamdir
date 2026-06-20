@@ -21,7 +21,7 @@ function mapUser(u: ApiUser): User {
     email: u.email,
     department: u.department ?? "",
     year: "",
-    avatar: u.avatar_url ?? `https://i.pravatar.cc/150?u=${u.id}`,
+    avatar: u.avatar_url ?? "",
     verified: u.is_verified === 1,
     rating: u.rating ?? 0,
     completedServices: 0,
@@ -73,9 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function register(name: string, email: string, password: string) {
-    const data = await api.post('/api/auth/register', { full_name: name, email, password });
-    localStorage.setItem('token', data.token);
-    setUser(mapUser(data.user));
+    await api.post('/api/auth/register', { full_name: name, email, password });
   }
 
   function logout() {
