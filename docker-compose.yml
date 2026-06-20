@@ -1,15 +1,35 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tamamdir
+      POSTGRES_USER: tamamdir
+      POSTGRES_PASSWORD: tamamdir_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tamamdir"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./tamamdir-backend
       dockerfile: Dockerfile
     ports:
       - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       NODE_ENV: development
       PORT: 4000
+      DATABASE_URL: postgres://tamamdir:tamamdir_dev_password@db:5432/tamamdir
       JWT_SECRET: ${JWT_SECRET:-tamamdir-local-dev-secret-change-before-deploy}
       CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
@@ -24,6 +44,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+volumes:
+  postgres_data:
 
   # Uncomment when frontend is ready to integrate
   # frontend:

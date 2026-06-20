@@ -35,6 +35,7 @@ const SCHEMA_STATEMENTS = [
     year             TEXT,
     is_verified      INTEGER DEFAULT 0,
     is_provider      INTEGER DEFAULT 0,
+    email_confirmed  BOOLEAN DEFAULT FALSE,
     wallet_balance   REAL DEFAULT 0.0,
     total_earnings   REAL DEFAULT 0.0,
     rating           REAL DEFAULT 0.0,
@@ -52,6 +53,15 @@ const SCHEMA_STATEMENTS = [
     user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
     PRIMARY KEY (user_id, category_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS email_tokens (
+    id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    type      TEXT NOT NULL CHECK (type IN ('verify', 'reset')),
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at   TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS services (
     id            TEXT PRIMARY KEY,
@@ -136,6 +146,8 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_orders_status     ON orders(status)`,
   `CREATE INDEX IF NOT EXISTS idx_messages_conv     ON messages(conversation_id)`,
   `CREATE INDEX IF NOT EXISTS idx_notifs_user       ON notifications(user_id, is_read)`,
+  `CREATE INDEX IF NOT EXISTS idx_email_tokens_user ON email_tokens(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_email_tokens_type ON email_tokens(type, expires_at)`,
 ];
 
 async function seed() {
