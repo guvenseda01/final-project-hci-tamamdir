@@ -1,14 +1,261 @@
 /**
- * /api/services
- *
- * GET    /                     – list / search services (public)
- * POST   /                     – create service (auth)
- * GET    /:id                  – service detail (public)
- * PATCH  /:id                  – update service (owner)
- * DELETE /:id                  – soft-delete service (owner)
- * POST   /:id/images           – upload portfolio images (owner)
- * DELETE /:id/images/:imageId  – remove portfolio image (owner)
+ * @swagger
+ * tags:
+ *   - name: Services
+ *     description: Service listings and management
  */
+
+/**
+ * @swagger
+ * /api/services:
+ *   get:
+ *     tags: [Services]
+ *     summary: List services with search and filters
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Free-text search in title and description
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Category ID or slug
+ *       - in: query
+ *         name: min_price
+ *         schema:
+ *           type: number
+ *       - in: query
+ *         name: max_price
+ *         schema:
+ *           type: number
+ *       - in: query
+ *         name: sort
+ *         schema:
+ *           type: string
+ *           enum: [newest, rating, price_asc, price_desc, popular]
+ *           default: newest
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *     responses:
+ *       200:
+ *         description: List of services
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Service'
+ *   post:
+ *     tags: [Services]
+ *     summary: Create a new service
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [category_id, title, price]
+ *             properties:
+ *               category_id:
+ *                 type: string
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               price:
+ *                 type: number
+ *               price_unit:
+ *                 type: string
+ *                 enum: [session, hour, day, week]
+ *               delivery_days:
+ *                 type: integer
+ *     responses:
+ *       201:
+ *         description: Service created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Service'
+ *       401:
+ *         description: Unauthorized
+ *       422:
+ *         description: Validation error
+ */
+
+/**
+ * @swagger
+ * /api/services/{id}:
+ *   get:
+ *     tags: [Services]
+ *     summary: Get service details
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Service ID
+ *     responses:
+ *       200:
+ *         description: Service details with images
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/Service'
+ *                 - type: object
+ *                   properties:
+ *                     images:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           image_url:
+ *                             type: string
+ *                           is_cover:
+ *                             type: boolean
+ *       404:
+ *         description: Service not found
+ *   patch:
+ *     tags: [Services]
+ *     summary: Update service details
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               price:
+ *                 type: number
+ *               price_unit:
+ *                 type: string
+ *               delivery_days:
+ *                 type: integer
+ *               is_active:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Service updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Service'
+ *       401:
+ *         description: Unauthorized or not the owner
+ *       404:
+ *         description: Service not found
+ *   delete:
+ *     tags: [Services]
+ *     summary: Delete service
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Service deleted
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Service not found
+ */
+
+/**
+ * @swagger
+ * /api/services/{id}/images:
+ *   post:
+ *     tags: [Services]
+ *     summary: Upload service images
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *               is_cover:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Images uploaded
+ *       401:
+ *         description: Unauthorized
+ *       413:
+ *         description: File too large
+ */
+
+/**
+ * @swagger
+ * /api/services/{id}/images/{imageId}:
+ *   delete:
+ *     tags: [Services]
+ *     summary: Delete service image
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: imageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Image deleted
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Image not found
+ */
+
 const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');

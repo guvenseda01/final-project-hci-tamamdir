@@ -1,9 +1,65 @@
 /**
- * /api/categories
- *
- * GET /    – list all categories
- * GET /:id – single category with service count
+ * @swagger
+ * tags:
+ *   - name: Categories
+ *     description: Service categories
  */
+
+/**
+ * @swagger
+ * /api/categories:
+ *   get:
+ *     tags: [Categories]
+ *     summary: List all categories
+ *     responses:
+ *       200:
+ *         description: List of categories with service counts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 allOf:
+ *                   - $ref: '#/components/schemas/Category'
+ *                   - type: object
+ *                     properties:
+ *                       service_count:
+ *                         type: integer
+ */
+
+/**
+ * @swagger
+ * /api/categories/{id}:
+ *   get:
+ *     tags: [Categories]
+ *     summary: Get category details
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Category ID or slug
+ *     responses:
+ *       200:
+ *         description: Category details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/Category'
+ *                 - type: object
+ *                   properties:
+ *                     service_count:
+ *                       type: integer
+ *       404:
+ *         description: Category not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+
 const router = require('express').Router();
 const { get, all } = require('../config/database');
 

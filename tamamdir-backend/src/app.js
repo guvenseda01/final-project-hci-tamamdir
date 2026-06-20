@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const swaggerUi = require('swagger-ui-express');
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -11,6 +12,7 @@ const reviewRoutes = require('./routes/reviews');
 const categoryRoutes = require('./routes/categories');
 
 const { errorHandler } = require('./middleware/errorHandler');
+const swaggerSpecs = require('./config/swagger');
 
 const app = express();
 
@@ -24,6 +26,13 @@ app.use(express.urlencoded({ extended: true }));
 
 // Static file serving for uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Swagger documentation
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
+  swaggerOptions: {
+    persistAuthorization: true,
+  },
+}));
 
 // Health check
 app.get('/health', (req, res) => {
