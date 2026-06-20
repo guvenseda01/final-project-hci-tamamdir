@@ -22,7 +22,7 @@ export default function SignupPage() {
     if (!form.name.trim()) errs.name = "Ad Soyad zorunludur.";
     if (!form.email) errs.email = "E-posta zorunludur.";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = "Geçerli bir e-posta girin.";
-    if (!form.password || form.password.length < 6) errs.password = "Şifre en az 6 karakter.";
+    if (!form.password || form.password.length < 8) errs.password = "Şifre en az 8 karakter.";
     if (!form.confirm) errs.confirm = "Şifreyi tekrar girin.";
     else if (form.password !== form.confirm) errs.confirm = "Şifreler eşleşmiyor.";
     return errs;
@@ -38,8 +38,14 @@ export default function SignupPage() {
       await register(form.name, form.email, form.password);
       navigate("/");
     } catch (err: unknown) {
-      const msg = (err as { message?: string }).message ?? "Kayıt başarısız.";
-      setApiError(msg === "Email already registered" ? "Bu e-posta zaten kayıtlı." : msg);
+      const msg = (err as { message?: string }).message ?? "";
+      if (!msg || msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {
+        setApiError("Sunucuya bağlanılamadı. Backend'in çalıştığından emin olun.");
+      } else if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already")) {
+        setApiError("Bu e-posta zaten kayıtlı.");
+      } else {
+        setApiError(msg || "Kayıt başarısız.");
+      }
     } finally {
       setLoading(false);
     }
@@ -115,7 +121,7 @@ export default function SignupPage() {
                 value={form.password}
                 onChange={set("password")}
                 className="w-full h-14 pl-12 pr-12 rounded-xl border border-outline-variant bg-surface-container-low focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-body-md"
-                placeholder="Minimum 6 karakter"
+                placeholder="Minimum 8 karakter"
               />
               <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface">
                 <span className="material-symbols-outlined">{showPassword ? "visibility_off" : "visibility"}</span>
