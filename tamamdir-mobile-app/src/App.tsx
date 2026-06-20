@@ -15,6 +15,7 @@ import AddNewServicePage from "./pages/AddNewServicePage";
 import EditServicePage from "./pages/EditServicePage";
 import ProfileManagePage from "./pages/ProfileManagePage";
 import ServiceOwnerViewPage from "./pages/ServiceOwnerViewPage";
+import OnboardingPage from "./pages/OnboardingPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, loading } = useAuth();
@@ -31,6 +32,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route path="/onboarding" element={<RequireAuth><OnboardingPage /></RequireAuth>} />
       <Route path="/" element={<RequireAuth><HomePage /></RequireAuth>} />
       <Route path="/services" element={<RequireAuth><ServicesPage /></RequireAuth>} />
       <Route path="/services/new" element={<RequireAuth><AddNewServicePage /></RequireAuth>} />

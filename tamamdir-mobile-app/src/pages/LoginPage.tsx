@@ -27,7 +27,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate("/");
+      const done = localStorage.getItem("onboarding_done");
+      navigate(done ? "/" : "/onboarding");
     } catch (err: unknown) {
       const msg = (err as { message?: string }).message ?? "";
       if (!msg || msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {
