@@ -97,6 +97,7 @@ const SCHEMA_STATEMENTS = [
     id            TEXT PRIMARY KEY,
     participant_a TEXT NOT NULL REFERENCES users(id),
     participant_b TEXT NOT NULL REFERENCES users(id),
+    service_id    TEXT REFERENCES services(id),
     last_message  TEXT,
     last_msg_at   TIMESTAMPTZ,
     created_at    TIMESTAMPTZ DEFAULT NOW(),
@@ -109,6 +110,24 @@ const SCHEMA_STATEMENTS = [
     content         TEXT NOT NULL,
     is_read         INTEGER DEFAULT 0,
     created_at      TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS conversation_tamamdir (
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    service_id      TEXT NOT NULL REFERENCES services(id),
+    user_id         TEXT NOT NULL REFERENCES users(id),
+    confirmed_at    TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (conversation_id, service_id, user_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS conversation_service_arrangements (
+    conversation_id      TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    service_id           TEXT NOT NULL REFERENCES services(id),
+    cancel_count         INTEGER DEFAULT 0,
+    customer_cancel_count INTEGER DEFAULT 0,
+    provider_cancel_count INTEGER DEFAULT 0,
+    banned_until         TIMESTAMPTZ,
+    banned_user_id       TEXT REFERENCES users(id),
+    updated_at           TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (conversation_id, service_id)
   )`,
   `CREATE TABLE IF NOT EXISTS reviews (
     id          TEXT PRIMARY KEY,
@@ -192,6 +211,33 @@ async function initDB() {
   await pool.query(
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ'
   );
+  await pool.query(
+    'ALTER TABLE conversations ADD COLUMN IF NOT EXISTS service_id TEXT REFERENCES services(id)'
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS conversation_service_arrangements (
+      conversation_id      TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      service_id           TEXT NOT NULL REFERENCES services(id),
+      cancel_count         INTEGER DEFAULT 0,
+      customer_cancel_count INTEGER DEFAULT 0,
+      provider_cancel_count INTEGER DEFAULT 0,
+      banned_until         TIMESTAMPTZ,
+      banned_user_id       TEXT REFERENCES users(id),
+      updated_at           TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (conversation_id, service_id)
+    )
+  `);
+  await pool.query(
+    'ALTER TABLE conversation_service_arrangements ADD COLUMN IF NOT EXISTS customer_cancel_count INTEGER DEFAULT 0'
+  );
+  await pool.query(
+    'ALTER TABLE conversation_service_arrangements ADD COLUMN IF NOT EXISTS provider_cancel_count INTEGER DEFAULT 0'
+  );
+  await pool.query(`
+    UPDATE conversation_service_arrangements
+    SET customer_cancel_count = cancel_count
+    WHERE customer_cancel_count = 0 AND cancel_count > 0
+  `);
   await pool.query(`
     UPDATE users SET is_verified_student = 1
     WHERE is_verified_student = 0
