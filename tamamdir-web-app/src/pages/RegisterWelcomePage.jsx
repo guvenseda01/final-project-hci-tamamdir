@@ -53,10 +53,10 @@ export default function RegisterWelcomePage() {
 
             <button
               type="button"
-              onClick={() => navigate('/home')}
+              onClick={() => navigate('/onboarding')}
               className="btn-primary w-full justify-center py-3.5 text-base mx-auto"
             >
-              Go to Tamamdır
+              Continue
               <ArrowRight className="w-5 h-5" />
             </button>
           </div>

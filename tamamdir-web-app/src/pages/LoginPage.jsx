@@ -17,8 +17,8 @@ export default function LoginPage() {
     setError('')
     setSubmitting(true)
     try {
-      await login(email, password)
-      navigate('/home')
+      const data = await login(email, password)
+      navigate(data.user?.interests?.length ? '/home' : '/onboarding')
     } catch (err) {
       if (err.status === 403 && err.data?.needs_verification) {
         navigate('/verify-email', {

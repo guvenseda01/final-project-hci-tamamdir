@@ -347,7 +347,7 @@ export default function ServiceDetailPage() {
                   </div>
                 </div>
 
-                <Link to={`/profile`} className="btn-outline w-full justify-center text-sm py-2.5">
+                <Link to={`/users/${service.provider_id}`} className="btn-outline w-full justify-center text-sm py-2.5">
                   View Profile
                 </Link>
               </div>
