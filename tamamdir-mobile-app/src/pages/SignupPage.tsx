@@ -5,14 +5,15 @@ import { useAuth } from "../context/AuthContext";
 export default function SignupPage() {
   const navigate = useNavigate();
   const { register } = useAuth();
-  const [form, setForm] = useState({ name: "", email: "", password: "", department: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [apiError, setApiError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   function set(k: string) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    return (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm((p) => ({ ...p, [k]: e.target.value }));
   }
 
@@ -21,8 +22,9 @@ export default function SignupPage() {
     if (!form.name.trim()) errs.name = "Ad Soyad zorunludur.";
     if (!form.email) errs.email = "E-posta zorunludur.";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = "Geçerli bir e-posta girin.";
-    if (!form.password || form.password.length < 6) errs.password = "Şifre en az 6 karakter.";
-    if (!form.department) errs.department = "Bölüm zorunludur.";
+    if (!form.password || form.password.length < 8) errs.password = "Şifre en az 8 karakter.";
+    if (!form.confirm) errs.confirm = "Şifreyi tekrar girin.";
+    else if (form.password !== form.confirm) errs.confirm = "Şifreler eşleşmiyor.";
     return errs;
   }
 
@@ -36,8 +38,14 @@ export default function SignupPage() {
       await register(form.name, form.email, form.password);
       navigate("/");
     } catch (err: unknown) {
-      const msg = (err as { message?: string }).message ?? "Kayıt başarısız.";
-      setApiError(msg === "Email already registered" ? "Bu e-posta zaten kayıtlı." : msg);
+      const msg = (err as { message?: string }).message ?? "";
+      if (!msg || msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {
+        setApiError("Sunucuya bağlanılamadı. Backend'in çalıştığından emin olun.");
+      } else if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already")) {
+        setApiError("Bu e-posta zaten kayıtlı.");
+      } else {
+        setApiError(msg || "Kayıt başarısız.");
+      }
     } finally {
       setLoading(false);
     }
@@ -67,47 +75,42 @@ export default function SignupPage() {
               {apiError}
             </div>
           )}
-          {[
-            { id: "name", label: "Ad Soyad", icon: "person", placeholder: "Adın Soyadın", type: "text" },
-            { id: "email", label: "E-posta", icon: "mail", placeholder: "ornek@mail.com", type: "email" },
-          ].map(({ id, label, icon, placeholder, type }) => (
-            <div key={id} className="flex flex-col gap-base">
-              <label className="font-bold text-label-bold text-on-surface-variant px-1" htmlFor={id}>{label}</label>
-              <div className="relative group">
-                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">{icon}</span>
-                <input
-                  id={id}
-                  type={type}
-                  value={form[id as keyof typeof form]}
-                  onChange={set(id)}
-                  className="w-full h-14 pl-12 pr-4 rounded-xl border border-outline-variant bg-surface-container-low focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-body-md"
-                  placeholder={placeholder}
-                />
-              </div>
-              {errors[id] && <p className="text-error text-xs px-1">{errors[id]}</p>}
-            </div>
-          ))}
 
+          {/* Ad Soyad */}
           <div className="flex flex-col gap-base">
-            <label className="font-bold text-label-bold text-on-surface-variant px-1" htmlFor="department">Bölüm</label>
+            <label className="font-bold text-label-bold text-on-surface-variant px-1" htmlFor="name">Ad Soyad</label>
             <div className="relative group">
-              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">apartment</span>
-              <select
-                id="department"
-                value={form.department}
-                onChange={set("department")}
-                className="w-full h-14 pl-12 pr-4 rounded-xl border border-outline-variant bg-surface-container-low focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-body-md appearance-none"
-              >
-                <option value="">Bölümünü seç</option>
-                {["Bilgisayar Mühendisliği", "Elektrik Mühendisliği", "Makine Mühendisliği", "Mimarlık", "Endüstriyel Tasarım", "Matematik", "Fizik", "Kimya", "Biyoteknoloji", "Malzeme Bilimi"].map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-              <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline pointer-events-none">expand_more</span>
+              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">person</span>
+              <input
+                id="name"
+                type="text"
+                value={form.name}
+                onChange={set("name")}
+                className="w-full h-14 pl-12 pr-4 rounded-xl border border-outline-variant bg-surface-container-low focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-body-md"
+                placeholder="Adın Soyadın"
+              />
             </div>
-            {errors.department && <p className="text-error text-xs px-1">{errors.department}</p>}
+            {errors.name && <p className="text-error text-xs px-1">{errors.name}</p>}
           </div>
 
+          {/* E-posta */}
+          <div className="flex flex-col gap-base">
+            <label className="font-bold text-label-bold text-on-surface-variant px-1" htmlFor="email">E-posta</label>
+            <div className="relative group">
+              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">mail</span>
+              <input
+                id="email"
+                type="email"
+                value={form.email}
+                onChange={set("email")}
+                className="w-full h-14 pl-12 pr-4 rounded-xl border border-outline-variant bg-surface-container-low focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-body-md"
+                placeholder="ornek@mail.com"
+              />
+            </div>
+            {errors.email && <p className="text-error text-xs px-1">{errors.email}</p>}
+          </div>
+
+          {/* Şifre */}
           <div className="flex flex-col gap-base">
             <label className="font-bold text-label-bold text-on-surface-variant px-1" htmlFor="signup-password">Şifre</label>
             <div className="relative group">
@@ -118,13 +121,37 @@ export default function SignupPage() {
                 value={form.password}
                 onChange={set("password")}
                 className="w-full h-14 pl-12 pr-12 rounded-xl border border-outline-variant bg-surface-container-low focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-body-md"
-                placeholder="Minimum 6 karakter"
+                placeholder="Minimum 8 karakter"
               />
               <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface">
                 <span className="material-symbols-outlined">{showPassword ? "visibility_off" : "visibility"}</span>
               </button>
             </div>
             {errors.password && <p className="text-error text-xs px-1">{errors.password}</p>}
+          </div>
+
+          {/* Şifre Tekrar */}
+          <div className="flex flex-col gap-base">
+            <label className="font-bold text-label-bold text-on-surface-variant px-1" htmlFor="signup-confirm">Şifre Tekrar</label>
+            <div className="relative group">
+              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">lock_reset</span>
+              <input
+                id="signup-confirm"
+                type={showConfirm ? "text" : "password"}
+                value={form.confirm}
+                onChange={set("confirm")}
+                className={`w-full h-14 pl-12 pr-12 rounded-xl border bg-surface-container-low focus:ring-1 outline-none transition-all text-body-md ${
+                  errors.confirm
+                    ? "border-error focus:border-error focus:ring-error"
+                    : "border-outline-variant focus:border-primary focus:ring-primary"
+                }`}
+                placeholder="Şifreni tekrar gir"
+              />
+              <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-4 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface">
+                <span className="material-symbols-outlined">{showConfirm ? "visibility_off" : "visibility"}</span>
+              </button>
+            </div>
+            {errors.confirm && <p className="text-error text-xs px-1">{errors.confirm}</p>}
           </div>
 
           <div className="bg-primary/5 rounded-xl p-3 flex items-start gap-2">
