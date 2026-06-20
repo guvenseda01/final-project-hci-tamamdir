@@ -210,13 +210,14 @@ const { v4: uuidv4 } = require('uuid');
 const { run, get, all } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { avatarUpload } = require('../middleware/upload');
+const { sanitizeUser } = require('../utils/user');
 
 // ── GET /api/users/:id ──────────────────────────────────────────────────────
 router.get('/:id', async (req, res, next) => {
   try {
     const user = await get(
       `SELECT id, full_name, avatar_url, bio, department, year,
-              is_verified, is_provider, rating, review_count, created_at
+              is_verified, is_verified_student, is_provider, rating, review_count, created_at
        FROM users WHERE id = ?`,
       [req.params.id]
     );
@@ -229,7 +230,7 @@ router.get('/:id', async (req, res, next) => {
       [user.id]
     );
 
-    return res.json({ ...user, interests });
+    return res.json({ ...sanitizeUser(user), interests });
   } catch (err) {
     next(err);
   }
@@ -276,11 +277,11 @@ router.patch(
 
       const updated = await get(
         `SELECT id, full_name, avatar_url, bio, department, year,
-                is_verified, is_provider, rating, review_count, wallet_balance, total_earnings
+                is_verified, is_verified_student, is_provider, rating, review_count, wallet_balance, total_earnings
          FROM users WHERE id = ?`,
         [req.params.id]
       );
-      return res.json(updated);
+      return res.json(sanitizeUser(updated));
     } catch (err) {
       next(err);
     }

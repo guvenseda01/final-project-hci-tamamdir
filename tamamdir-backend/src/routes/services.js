@@ -314,7 +314,8 @@ router.get('/', optionalAuth, async (req, res, next) => {
       SELECT s.*,
              c.name AS category_name, c.slug AS category_slug, c.icon AS category_icon,
              u.full_name AS provider_name, u.avatar_url AS provider_avatar,
-             u.is_verified AS provider_verified, u.rating AS provider_rating
+             (CASE WHEN u.is_verified = 1 AND u.is_verified_student = 1 THEN 1 ELSE 0 END) AS provider_verified,
+             u.rating AS provider_rating
       FROM services s
       JOIN categories c ON c.id = s.category_id
       JOIN users u      ON u.id = s.provider_id
@@ -531,7 +532,8 @@ async function getFullService(id) {
             c.name AS category_name, c.slug AS category_slug, c.icon AS category_icon,
             u.full_name AS provider_name, u.avatar_url AS provider_avatar,
             u.bio AS provider_bio, u.department AS provider_department,
-            u.year AS provider_year, u.is_verified AS provider_verified,
+            u.year AS provider_year,
+            (CASE WHEN u.is_verified = 1 AND u.is_verified_student = 1 THEN 1 ELSE 0 END) AS provider_verified,
             u.rating AS provider_rating, u.review_count AS provider_review_count
      FROM services s
      JOIN categories c ON c.id = s.category_id

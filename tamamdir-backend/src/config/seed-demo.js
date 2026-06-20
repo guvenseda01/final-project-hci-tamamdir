@@ -62,8 +62,8 @@ async function main() {
     uid[u.email] = id;
     const isProvider = providerDefs.some(p => p.email === u.email) ? 1 : 0;
     await run(
-      `INSERT INTO users (id, full_name, email, password_hash, bio, department, year, is_verified, is_provider)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+      `INSERT INTO users (id, full_name, email, password_hash, bio, department, year, is_verified, is_verified_student, is_provider)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?)`,
       [id, u.full_name, u.email, hash, u.bio, u.dept, u.year, isProvider]
     );
   }

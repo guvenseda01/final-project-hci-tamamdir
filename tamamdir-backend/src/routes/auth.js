@@ -152,6 +152,7 @@ const { v4: uuidv4 } = require('uuid');
 const { run, get } = require('../config/database');
 const { signToken, requireAuth } = require('../middleware/auth');
 const { sendVerificationEmail } = require('../services/email');
+const { isIyteStudentEmail, sanitizeUser } = require('../utils/user');
 const {
   generateCode,
   hashCode,
@@ -208,11 +209,12 @@ router.post(
       // All new accounts require email verification
       const id           = uuidv4();
       const passwordHash = await bcrypt.hash(password, 12);
+      const isVerifiedStudent = isIyteStudentEmail(email) ? 1 : 0;
 
       await run(
-        `INSERT INTO users (id, full_name, email, password_hash, is_verified)
-         VALUES (?, ?, ?, ?, 0)`,
-        [id, full_name, email, passwordHash]
+        `INSERT INTO users (id, full_name, email, password_hash, is_verified, is_verified_student)
+         VALUES (?, ?, ?, ?, 0, ?)`,
+        [id, full_name, email, passwordHash, isVerifiedStudent]
       );
 
       const user = await get('SELECT * FROM users WHERE id = ?', [id]);
@@ -254,6 +256,14 @@ router.post(
       const valid = await bcrypt.compare(password, user.password_hash);
       if (!valid) {
         return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      if (!user.is_verified) {
+        return res.status(403).json({
+          error: 'Email not verified',
+          needs_verification: true,
+          email: user.email,
+        });
       }
 
       const token = signToken({ id: user.id, email: user.email });
@@ -386,11 +396,5 @@ router.get('/me', requireAuth, async (req, res, next) => {
     next(err);
   }
 });
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-function sanitizeUser(user) {
-  const { password_hash, ...safe } = user;
-  return safe;
-}
 
 module.exports = router;
