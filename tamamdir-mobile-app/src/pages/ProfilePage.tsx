@@ -9,9 +9,14 @@ interface SettingsRow {
   to?: string;
 }
 
+function isIyteStudent(email?: string) {
+  return email?.endsWith("@std.iyte.edu.tr") ?? false;
+}
+
 export default function ProfilePage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const verified = isIyteStudent(user?.email);
 
   function handleLogout() {
     logout();
@@ -57,16 +62,25 @@ export default function ProfilePage() {
                   className="w-full h-full rounded-full object-cover"
                 />
               </div>
-              <div className="absolute bottom-1 right-1 bg-primary-container text-on-primary-container rounded-full p-1 border-2 border-inverse-surface">
-                <span className="material-symbols-outlined fill-icon text-sm leading-none">verified</span>
-              </div>
+              {verified && (
+                <div className="absolute bottom-1 right-1 bg-primary-container text-on-primary-container rounded-full p-1 border-2 border-inverse-surface">
+                  <span className="material-symbols-outlined fill-icon text-sm leading-none">verified</span>
+                </div>
+              )}
             </div>
             <h1 className="font-bold text-xl mb-1">{user?.name || "Kullanıcı"}</h1>
             <p className="text-sm opacity-80 mb-3">{user?.department} • {user?.year}</p>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary-container/20 border border-primary-container/30 rounded-full">
-              <span className="material-symbols-outlined fill-icon text-xs text-primary-fixed">school</span>
-              <span className="text-xs font-bold text-primary-fixed uppercase tracking-wider">Doğrulanmış Öğrenci</span>
-            </div>
+            {verified ? (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary-container/20 border border-primary-container/30 rounded-full">
+                <span className="material-symbols-outlined fill-icon text-xs text-primary-fixed">school</span>
+                <span className="text-xs font-bold text-primary-fixed uppercase tracking-wider">Doğrulanmış İYTE Öğrencisi</span>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-surface-container/30 border border-outline-variant/30 rounded-full">
+                <span className="material-symbols-outlined text-xs text-outline">person</span>
+                <span className="text-xs font-bold text-outline uppercase tracking-wider">Kullanıcı</span>
+              </div>
+            )}
           </div>
         </section>
 
