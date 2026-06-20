@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
 import TamamdirButton from "../components/TamamdirButton";
@@ -7,21 +7,61 @@ import VerificationBadge from "../components/VerificationBadge";
 import { useServices } from "../context/ServicesContext";
 import { useAuth } from "../context/AuthContext";
 import api from "../lib/api";
-import type { Review } from "../data/types";
+import { mapApiService } from "../lib/serviceMapper";
+import type { Review, Service } from "../data/types";
 
 export default function ServiceDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { services } = useServices();
   const { user } = useAuth();
+  const [service, setService] = useState<Service | null>(null);
+  const [loading, setLoading] = useState(true);
   const [favorited, setFavorited] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
 
-  const service = services.find((s) => s.id === id) ?? services[0];
   const reviews: Review[] = [];
-  const moreServices = services.filter((s) => s.providerId === service?.providerId && s.id !== service?.id).slice(0, 3);
+  const moreServices = service
+    ? services.filter((s) => s.providerId === service.providerId && s.id !== service.id).slice(0, 3)
+    : [];
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    api.get(`/api/services/${id}`)
+      .then((data) => setService(mapApiService(data)))
+      .catch(() => setService(null))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  useEffect(() => {
+    if (!id || !user) return;
+    api.get(`/api/favorites/${id}`)
+      .then((data: { favorited?: boolean }) => setFavorited(!!data?.favorited))
+      .catch(() => setFavorited(false));
+  }, [id, user]);
+
+  async function toggleFavorite() {
+    if (!id || !user || favoriteLoading) return;
+    setFavoriteLoading(true);
+    try {
+      if (favorited) {
+        await api.del(`/api/favorites/${id}`);
+        setFavorited(false);
+      } else {
+        await api.post(`/api/favorites/${id}`);
+        setFavorited(true);
+      }
+    } catch {
+      setToastMessage("Favori kaydedilemedi.");
+      setToastVisible(true);
+    } finally {
+      setFavoriteLoading(false);
+    }
+  }
 
   async function handleTamamdir() {
     if (!service) return;
@@ -67,6 +107,20 @@ export default function ServiceDetailPage() {
     <div className="bg-background min-h-screen max-w-md mx-auto pb-36">
       <Toast message={toastMessage} visible={toastVisible} onHide={() => setToastVisible(false)} />
 
+      {loading ? (
+        <div className="min-h-screen flex items-center justify-center">
+          <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
+        </div>
+      ) : !service ? (
+        <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6 text-center">
+          <span className="material-symbols-outlined text-5xl text-error">error</span>
+          <p className="font-bold text-on-surface">Hizmet bulunamadı.</p>
+          <button type="button" onClick={() => navigate(-1)} className="text-primary font-bold">
+            Geri Dön
+          </button>
+        </div>
+      ) : (
+      <>
       {/* Glassmorphism Header */}
       <header
         className="fixed top-0 left-0 right-0 z-50 border-b border-slate-200 transition-all duration-300 px-4 py-3 flex justify-between items-center max-w-md mx-auto"
@@ -83,8 +137,10 @@ export default function ServiceDetailPage() {
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setFavorited(!favorited)}
-            className="p-2 rounded-full hover:bg-slate-100 transition-colors active:scale-90"
+            type="button"
+            onClick={toggleFavorite}
+            disabled={favoriteLoading || !user}
+            className="p-2 rounded-full hover:bg-slate-100 transition-colors active:scale-90 disabled:opacity-50"
           >
             <span className={`material-symbols-outlined text-primary ${favorited ? "fill-icon" : ""}`}>favorite</span>
           </button>
@@ -274,6 +330,8 @@ export default function ServiceDetailPage() {
       </div>
 
       <BottomNav />
+      </>
+      )}
     </div>
   );
 }

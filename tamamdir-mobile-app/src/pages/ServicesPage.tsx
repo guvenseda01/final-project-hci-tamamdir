@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import TopBar from "../components/TopBar";
+import NotificationsDropdown from "../components/NotificationsDropdown";
+import ProfileMenuDropdown from "../components/ProfileMenuDropdown";
 import BottomNav from "../components/BottomNav";
 import ServiceCard from "../components/ServiceCard";
 import { useServices } from "../context/ServicesContext";
@@ -31,13 +33,9 @@ export default function ServicesPage() {
     <div className="bg-background min-h-screen max-w-md mx-auto">
       <TopBar
         rightContent={
-          <div className="flex gap-1">
-            <button className="p-2 hover:bg-slate-50 transition-colors rounded-full">
-              <span className="material-symbols-outlined text-slate-500">notifications</span>
-            </button>
-            <button className="p-2 hover:bg-slate-50 transition-colors rounded-full">
-              <span className="material-symbols-outlined text-slate-500">settings</span>
-            </button>
+          <div className="flex items-center gap-1">
+            <NotificationsDropdown />
+            <ProfileMenuDropdown />
           </div>
         }
       />

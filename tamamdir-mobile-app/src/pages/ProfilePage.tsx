@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
+import HeaderActionButtons from "../components/HeaderActionButtons";
 import { useAuth } from "../context/AuthContext";
 
 interface SettingsRow {
@@ -15,8 +17,12 @@ function isIyteStudent(email?: string) {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const verified = isIyteStudent(user?.email);
+
+  useEffect(() => {
+    refreshUser().catch(() => {});
+  }, [refreshUser]);
 
   function handleLogout() {
     logout();
@@ -38,14 +44,7 @@ export default function ProfilePage() {
       {/* Fixed TopBar */}
       <header className="bg-white flex justify-between items-center w-full px-6 py-3 border-b border-slate-200 shadow-sm sticky top-0 z-50">
         <span className="text-xl font-extrabold text-primary">Tamamdır</span>
-        <div className="flex items-center gap-2">
-          <button className="p-2 hover:bg-slate-50 transition-colors rounded-full">
-            <span className="material-symbols-outlined text-slate-500">notifications</span>
-          </button>
-          <button className="p-2 hover:bg-slate-50 transition-colors rounded-full">
-            <span className="material-symbols-outlined text-slate-500">help</span>
-          </button>
-        </div>
+        <HeaderActionButtons showHelp />
       </header>
 
       <main className="pb-24">
@@ -94,7 +93,7 @@ export default function ProfilePage() {
           <div className="grid grid-cols-3 gap-3 bg-surface-container-lowest shadow-card rounded-xl p-4 border border-outline-variant/30">
             {[
               { val: user?.completedServices ?? 0, label: "Tamamlanan" },
-              { val: user?.rating ? user.rating.toFixed(1) : "—", label: "Puan" },
+              { val: user?.rating && user.rating > 0 ? user.rating.toFixed(1) : "—", label: "Puan" },
               { val: user?.activeServices ?? 0, label: "Hizmet" },
             ].map((s, i) => (
               <div key={i} className={`text-center ${i < 2 ? "border-r border-outline-variant/30" : ""}`}>
@@ -190,7 +189,11 @@ export default function ProfilePage() {
 
           {/* Footer Actions */}
           <div className="space-y-3">
-            <button className="w-full py-4 flex items-center justify-center gap-2 text-secondary font-bold bg-white rounded-2xl border border-outline-variant/20 active:bg-slate-50 transition-colors text-sm">
+            <button
+              type="button"
+              onClick={() => navigate("/help")}
+              className="w-full py-4 flex items-center justify-center gap-2 text-secondary font-bold bg-white rounded-2xl border border-outline-variant/20 active:bg-slate-50 transition-colors text-sm"
+            >
               <span className="material-symbols-outlined">help</span>
               Yardım Merkezi & Destek
             </button>

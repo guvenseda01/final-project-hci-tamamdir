@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import TopBar from "../components/TopBar";
+import NotificationsDropdown from "../components/NotificationsDropdown";
+import ProfileMenuDropdown from "../components/ProfileMenuDropdown";
 import BottomNav from "../components/BottomNav";
 import type { ServiceHistory } from "../data/types";
 import api from "../lib/api";
@@ -42,13 +44,9 @@ export default function HistoryPage() {
     <div className="bg-background min-h-screen max-w-md mx-auto">
       <TopBar
         rightContent={
-          <div className="flex gap-1">
-            <button className="p-2 rounded-full hover:bg-slate-50 transition-colors">
-              <span className="material-symbols-outlined text-slate-500">notifications</span>
-            </button>
-            <button className="p-2 rounded-full hover:bg-slate-50 transition-colors">
-              <span className="material-symbols-outlined text-slate-500">account_circle</span>
-            </button>
+          <div className="flex items-center gap-1">
+            <NotificationsDropdown />
+            <ProfileMenuDropdown />
           </div>
         }
       />

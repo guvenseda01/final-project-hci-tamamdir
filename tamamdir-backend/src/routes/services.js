@@ -418,10 +418,10 @@ router.patch(
   [
     body('title').optional().trim().notEmpty().isLength({ max: 120 }),
     body('description').optional().isLength({ max: 2000 }),
-    body('price').optional().isFloat({ min: 1 }),
+    body('price').optional().toFloat().isFloat({ min: 1 }),
     body('price_unit').optional().isIn(['session', 'hour', 'item', 'day', 'piece']),
-    body('delivery_days').optional().isInt({ min: 1, max: 90 }),
-    body('is_active').optional().isBoolean(),
+    body('delivery_days').optional().toInt().isInt({ min: 1, max: 90 }),
+    body('is_active').optional().custom((v) => v === true || v === false || v === 0 || v === 1),
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -439,7 +439,13 @@ router.patch(
       fields.forEach(f => {
         if (req.body[f] !== undefined) {
           updates.push(`${f} = ?`);
-          values.push(req.body[f]);
+          if (f === 'is_active') {
+            values.push(req.body[f] ? 1 : 0);
+          } else if (f === 'price') {
+            values.push(parseFloat(req.body[f]));
+          } else {
+            values.push(req.body[f]);
+          }
         }
       });
 
@@ -547,6 +553,9 @@ async function getFullService(id) {
     'SELECT id, image_url, is_cover, sort_order FROM service_images WHERE service_id = ? ORDER BY sort_order',
     [id]
   );
+
+  const cover = service.images.find(i => i.is_cover === 1);
+  service.cover_image = cover ? cover.image_url : (service.images[0]?.image_url ?? null);
 
   service.recent_reviews = await all(
     `SELECT r.*, u.full_name AS reviewer_name, u.avatar_url AS reviewer_avatar

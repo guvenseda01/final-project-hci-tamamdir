@@ -149,6 +149,12 @@ const SCHEMA_STATEMENTS = [
     ref_id     TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
   )`,
+  `CREATE TABLE IF NOT EXISTS service_favorites (
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    service_id TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (user_id, service_id)
+  )`,
   `CREATE TABLE IF NOT EXISTS email_verifications (
     id         TEXT PRIMARY KEY,
     user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

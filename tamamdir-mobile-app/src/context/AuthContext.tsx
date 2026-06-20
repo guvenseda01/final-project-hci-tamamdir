@@ -7,11 +7,15 @@ interface ApiUser {
   full_name: string;
   email: string;
   avatar_url: string | null;
-  is_verified: 0 | 1;
+  email_verified?: boolean;
+  is_verified_student?: boolean;
   department: string | null;
+  year: string | null;
   bio: string | null;
   rating: number;
   review_count: number;
+  completed_orders?: number;
+  active_services?: number;
 }
 
 function mapUser(u: ApiUser): User {
@@ -20,13 +24,19 @@ function mapUser(u: ApiUser): User {
     name: u.full_name,
     email: u.email,
     department: u.department ?? "",
-    year: "",
+    year: u.year ?? "",
     avatar: u.avatar_url ?? "",
-    verified: u.is_verified === 1,
+    verified: !!(u.is_verified_student ?? u.email_verified),
     rating: u.rating ?? 0,
-    completedServices: 0,
-    activeServices: 0,
+    completedServices: u.completed_orders ?? 0,
+    activeServices: u.active_services ?? 0,
   };
+}
+
+interface RegisterResult {
+  email: string;
+  expires_in_minutes?: number;
+  needs_verification?: boolean;
 }
 
 interface AuthContextType {
@@ -34,10 +44,13 @@ interface AuthContextType {
   isLoggedIn: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<RegisterResult>;
+  verifyEmail: (email: string, code: string) => Promise<void>;
+  resendVerification: (email: string) => Promise<void>;
   logout: () => void;
   updateAvatar: (dataUrl: string) => void;
   updateUser: (fields: Partial<Pick<User, "name" | "email">>) => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -45,10 +58,13 @@ const AuthContext = createContext<AuthContextType>({
   isLoggedIn: false,
   loading: true,
   login: async () => {},
-  register: async () => {},
+  register: async () => ({ email: "" }),
+  verifyEmail: async () => {},
+  resendVerification: async () => {},
   logout: () => {},
   updateAvatar: () => {},
   updateUser: () => {},
+  refreshUser: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -82,8 +98,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(mergeLocalOverrides(mapUser(data.user)));
   }
 
-  async function register(name: string, email: string, password: string) {
-    await api.post('/api/auth/register', { full_name: name, email, password });
+  async function register(name: string, email: string, password: string): Promise<RegisterResult> {
+    const data = await api.post('/api/auth/register', { full_name: name, email, password });
+    return {
+      email: data.email ?? email,
+      expires_in_minutes: data.expires_in_minutes,
+      needs_verification: data.needs_verification,
+    };
+  }
+
+  async function verifyEmail(email: string, code: string) {
+    const data = await api.post('/api/auth/verify-email', { email, code });
+    localStorage.setItem('token', data.token);
+    setUser(mergeLocalOverrides(mapUser(data.user)));
+  }
+
+  async function resendVerification(email: string) {
+    await api.post('/api/auth/resend-verification', { email });
   }
 
   function logout() {
@@ -105,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn: !!user, loading, login, register, logout, updateAvatar, updateUser }}>
+    <AuthContext.Provider value={{ user, isLoggedIn: !!user, loading, login, register, verifyEmail, resendVerification, logout, updateAvatar, updateUser, refreshUser: fetchMe }}>
       {children}
     </AuthContext.Provider>
   );

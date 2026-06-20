@@ -154,6 +154,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const { run, get, all } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const { createNotification } = require('../utils/notifications');
 
 async function getConversationForUser(convId, userId) {
   const conv = await get('SELECT * FROM conversations WHERE id = ?', [convId]);
@@ -356,6 +357,18 @@ router.post(
         `UPDATE conversations SET last_message = ?, last_msg_at = NOW() WHERE id = ?`,
         [req.body.content.slice(0, 100), req.params.id]
       );
+
+      const recipientId =
+        conv.participant_a === req.user.id ? conv.participant_b : conv.participant_a;
+      const sender = await get('SELECT full_name FROM users WHERE id = ?', [req.user.id]);
+
+      await createNotification({
+        user_id: recipientId,
+        type: 'message_new',
+        title: `${sender?.full_name ?? 'Bir kullanıcı'} size mesaj gönderdi`,
+        body: req.body.content.slice(0, 100),
+        ref_id: req.params.id,
+      });
 
       const message = await get(
         `SELECT m.*, u.full_name AS sender_name, u.avatar_url AS sender_avatar
