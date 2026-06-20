@@ -37,6 +37,7 @@ interface AuthContextType {
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   updateAvatar: (dataUrl: string) => void;
+  updateUser: (fields: Partial<Pick<User, "name" | "email">>) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -47,6 +48,7 @@ const AuthContext = createContext<AuthContextType>({
   register: async () => {},
   logout: () => {},
   updateAvatar: () => {},
+  updateUser: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -73,7 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('token', data.token);
     const mapped = mapUser(data.user);
     const savedAvatar = localStorage.getItem('avatar');
-    setUser(savedAvatar ? { ...mapped, avatar: savedAvatar } : mapped);
+    const savedFields = JSON.parse(localStorage.getItem('userFields') ?? '{}');
+    setUser({ ...mapped, ...savedFields, ...(savedAvatar ? { avatar: savedAvatar } : {}) });
   }
 
   async function register(name: string, email: string, password: string) {
@@ -83,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('avatar');
+    localStorage.removeItem('userFields');
     setUser(null);
   }
 
@@ -91,8 +95,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser((prev) => prev ? { ...prev, avatar: dataUrl } : prev);
   }
 
+  function updateUser(fields: Partial<Pick<User, "name" | "email">>) {
+    localStorage.setItem('userFields', JSON.stringify(fields));
+    setUser((prev) => prev ? { ...prev, ...fields } : prev);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn: !!user, loading, login, register, logout, updateAvatar }}>
+    <AuthContext.Provider value={{ user, isLoggedIn: !!user, loading, login, register, logout, updateAvatar, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

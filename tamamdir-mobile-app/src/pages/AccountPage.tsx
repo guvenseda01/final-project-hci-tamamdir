@@ -10,7 +10,7 @@ function isIyteEmail(email: string) {
 
 export default function AccountPage() {
   const navigate = useNavigate();
-  const { user, logout, updateAvatar } = useAuth();
+  const { user, logout, updateAvatar, updateUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -39,6 +39,7 @@ export default function AccountPage() {
   }
 
   function save() {
+    updateUser({ name: form.name, email: form.email });
     showToast("Bilgiler kaydedildi!");
   }
 
