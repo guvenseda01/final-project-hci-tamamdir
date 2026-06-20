@@ -4,10 +4,15 @@ import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
 import Toast from "../components/Toast";
 
+function isIyteEmail(email: string) {
+  return email.endsWith("@std.iyte.edu.tr") || email.endsWith("@iyte.edu.tr");
+}
+
 export default function AccountPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
   const [notifSettings, setNotifSettings] = useState([
     { label: "Mesaj bildirimleri", sub: "Yeni mesaj geldiğinde bildir", on: true },
@@ -15,24 +20,46 @@ export default function AccountPage() {
     { label: "Promosyonlar", sub: "Kampanya ve fırsatlardan haberdar ol", on: false },
   ]);
 
+  const [form, setForm] = useState({
+    name: user?.name || "",
+    email: user?.email || "",
+  });
+
+  const [iyteEmail, setIyteEmail] = useState("");
+  const [iyteEmailError, setIyteEmailError] = useState("");
+
   function toggleNotif(index: number) {
     setNotifSettings((prev) => prev.map((n, i) => i === index ? { ...n, on: !n.on } : n));
   }
 
-  const [form, setForm] = useState({
-    name: user?.name || "",
-    email: user?.email || "",
-    department: user?.department || "",
-    year: user?.year || "",
-  });
-
-  function save() {
+  function showToast(msg: string) {
+    setToastMessage(msg);
     setToastVisible(true);
   }
 
+  function save() {
+    showToast("Bilgiler kaydedildi!");
+  }
+
+  function handleIyteVerify() {
+    if (!iyteEmail) {
+      setIyteEmailError("E-posta zorunludur.");
+      return;
+    }
+    if (!isIyteEmail(iyteEmail)) {
+      setIyteEmailError("Yalnızca @std.iyte.edu.tr veya @iyte.edu.tr uzantılı e-posta kabul edilir.");
+      return;
+    }
+    setIyteEmailError("");
+    showToast("Doğrulama bağlantısı e-postanıza gönderildi!");
+    setIyteEmail("");
+  }
+
+  const verified = isIyteEmail(user?.email ?? "");
+
   return (
     <div className="bg-background min-h-screen max-w-md mx-auto">
-      <Toast message="Bilgiler kaydedildi!" visible={toastVisible} onHide={() => setToastVisible(false)} />
+      <Toast message={toastMessage} visible={toastVisible} onHide={() => setToastVisible(false)} />
       <TopBar showBack title="Hesap Yönetimi" />
 
       <main className="pt-20 pb-10 px-margin-mobile space-y-6">
@@ -58,8 +85,6 @@ export default function AccountPage() {
           {[
             { id: "name", label: "Ad Soyad", icon: "person", type: "text" },
             { id: "email", label: "E-posta", icon: "mail", type: "email" },
-            { id: "department", label: "Bölüm", icon: "apartment", type: "text" },
-            { id: "year", label: "Yıl", icon: "school", type: "text" },
           ].map(({ id, label, icon, type }) => (
             <div key={id} className="flex flex-col gap-1">
               <label className="font-bold text-xs text-on-surface-variant">{label}</label>
@@ -103,7 +128,7 @@ export default function AccountPage() {
         </div>
 
         {/* Student Verification */}
-        {user?.email?.endsWith("@std.iyte.edu.tr") ? (
+        {verified ? (
           <div className="bg-primary/5 rounded-2xl border border-primary/20 p-5">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
@@ -116,12 +141,12 @@ export default function AccountPage() {
               <span className="ml-auto text-xs bg-primary text-on-primary px-2.5 py-1 rounded-full font-bold">Aktif</span>
             </div>
             <p className="text-xs text-on-surface-variant">
-              <span className="font-bold">{user.email}</span> adresiyle giriş yaparak İYTE öğrenci rozeti aldınız. Diğer kullanıcılar profilinizde doğrulama işaretini görebilir.
+              <span className="font-bold">{user?.email}</span> adresiyle giriş yaparak İYTE öğrenci rozeti aldınız. Diğer kullanıcılar profilinizde doğrulama işaretini görebilir.
             </p>
           </div>
         ) : (
-          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 p-5">
-            <div className="flex items-center gap-3 mb-3">
+          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 p-5 space-y-4">
+            <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-secondary-container flex items-center justify-center text-on-secondary-container">
                 <span className="material-symbols-outlined">school</span>
               </div>
@@ -130,12 +155,40 @@ export default function AccountPage() {
                 <p className="text-[11px] text-secondary">Doğrulanmamış hesap</p>
               </div>
             </div>
-            <p className="text-xs text-on-surface-variant mb-3">
-              İYTE öğrenciyseniz <span className="font-bold">@std.iyte.edu.tr</span> uzantılı e-posta adresinizle yeni bir hesap oluşturarak doğrulanmış öğrenci rozeti alabilirsiniz.
+
+            <p className="text-xs text-on-surface-variant">
+              İYTE öğrenciyseniz üniversite e-postanızı ekleyerek doğrulanmış öğrenci rozeti alabilirsiniz.
             </p>
-            <div className="flex items-center gap-2 text-xs text-secondary bg-surface-container rounded-xl px-3 py-2">
-              <span className="material-symbols-outlined text-sm">info</span>
-              Doğrulama rozeti diğer kullanıcılara güven sinyali verir.
+
+            <div className="flex flex-col gap-2">
+              <label className="font-bold text-xs text-on-surface-variant">İYTE E-postası</label>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">mail</span>
+                <input
+                  type="email"
+                  value={iyteEmail}
+                  onChange={(e) => { setIyteEmail(e.target.value); setIyteEmailError(""); }}
+                  placeholder="ad.soyad@std.iyte.edu.tr"
+                  className={`w-full h-12 pl-10 pr-4 rounded-xl border bg-surface-container-low focus:ring-1 outline-none text-sm transition-all ${
+                    iyteEmailError
+                      ? "border-error focus:border-error focus:ring-error"
+                      : "border-outline-variant focus:border-primary focus:ring-primary"
+                  }`}
+                />
+              </div>
+              {iyteEmailError && (
+                <p className="text-error text-xs">{iyteEmailError}</p>
+              )}
+              <p className="text-[11px] text-outline">
+                Kabul edilen uzantılar: @std.iyte.edu.tr · @iyte.edu.tr
+              </p>
+              <button
+                onClick={handleIyteVerify}
+                className="w-full h-11 bg-secondary-container text-on-secondary-container rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+              >
+                <span className="material-symbols-outlined text-sm">verified</span>
+                Doğrula
+              </button>
             </div>
           </div>
         )}
