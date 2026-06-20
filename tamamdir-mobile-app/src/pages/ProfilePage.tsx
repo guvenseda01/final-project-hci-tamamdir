@@ -25,13 +25,12 @@ export default function ProfilePage() {
 
   const accountRows: SettingsRow[] = [
     { icon: "person", label: "Kişisel Bilgiler", sub: "Ad, E-posta, Öğrenci No", to: "/account" },
-    { icon: "manage_accounts", label: "Profil Yönetimi", sub: "Hizmetler, Kimlik, Ödeme", to: "/profile/manage" },
     { icon: "edit_attributes", label: "Kişiselleştirme", sub: "Tema, Dil, Erişilebilirlik", to: "/personalization" },
   ];
 
   const privacyRows: SettingsRow[] = [
     { icon: "shield", label: "Güvenlik", sub: "Şifre, 2FA, Giriş Cihazları" },
-    { icon: "settings_account_box", label: "Hesap Yönetimi", sub: "Deaktif, Gizlilik, Veri", to: "/account" },
+    { icon: "settings_account_box", label: "Hesap Yönetimi", sub: "Bildirimler, Doğrulama, Veri", to: "/account/settings" },
   ];
 
   return (

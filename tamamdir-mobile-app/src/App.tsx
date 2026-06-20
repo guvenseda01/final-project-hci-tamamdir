@@ -10,6 +10,7 @@ import MessagesPage from "./pages/MessagesPage";
 import HistoryPage from "./pages/HistoryPage";
 import ProfilePage from "./pages/ProfilePage";
 import AccountPage from "./pages/AccountPage";
+import AccountSettingsPage from "./pages/AccountSettingsPage";
 import PersonalizationPage from "./pages/PersonalizationPage";
 import AddNewServicePage from "./pages/AddNewServicePage";
 import EditServicePage from "./pages/EditServicePage";
@@ -44,6 +45,7 @@ function AppRoutes() {
       <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
       <Route path="/profile/manage" element={<RequireAuth><ProfileManagePage /></RequireAuth>} />
       <Route path="/account" element={<RequireAuth><AccountPage /></RequireAuth>} />
+      <Route path="/account/settings" element={<RequireAuth><AccountSettingsPage /></RequireAuth>} />
       <Route path="/personalization" element={<RequireAuth><PersonalizationPage /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
