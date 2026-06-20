@@ -20,6 +20,10 @@ export default function LoginPage() {
       await login(email, password)
       navigate('/home')
     } catch (err) {
+      if (err.status === 403 && err.data?.needs_verification) {
+        navigate('/verify-email', { state: { email: err.data.email } })
+        return
+      }
       setError(err.message || 'Login failed. Please try again.')
     } finally {
       setSubmitting(false)
