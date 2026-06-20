@@ -8,7 +8,7 @@ import ChatView from "./ChatView";
 import type { Conversation } from "../data/types";
 import api from "../lib/api";
 
-type ServiceContext = { id: string; title: string; price: string; image: string };
+type ServiceContext = { id: string; title: string; price: string; image: string; providerId?: string };
 
 function saveServiceContext(convId: string, ctx: ServiceContext) {
   try {
@@ -52,8 +52,8 @@ export default function MessagesPage() {
           participantName: c.other_name ?? "",
           participantAvatar: c.other_avatar ?? "",
           lastMessage: c.last_message ?? "",
-          lastTime: c.last_message_at
-            ? new Date(c.last_message_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+          lastTime: (c.last_msg_at ?? c.last_message_at)
+            ? new Date(c.last_msg_at ?? c.last_message_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
             : "",
           unread: (c.unread_count ?? 0) > 0,
           messages: [],
@@ -61,6 +61,16 @@ export default function MessagesPage() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const convId = locationState.openConversationId as string | undefined;
+    if (!convId || conversations.length === 0) return;
+    const conv = conversations.find((c) => c.id === convId);
+    if (conv) {
+      setActiveChat(conv);
+      setActiveChatService(loadServiceContext(convId));
+    }
+  }, [locationState.openConversationId, conversations]);
 
   if (activeChat) {
     return (

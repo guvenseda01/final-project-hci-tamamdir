@@ -2,34 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { mapApiService } from "../lib/serviceMapper";
+import { mapReviews } from "../lib/reviewMapper";
 import api from "../lib/api";
 import NotificationsDropdown from "../components/NotificationsDropdown";
 import ProfileMenuDropdown from "../components/ProfileMenuDropdown";
 import type { Review, Service } from "../data/types";
-
-interface ApiReview {
-  id: string;
-  service_id: string;
-  reviewer_id: string;
-  reviewer_name: string;
-  reviewer_avatar: string | null;
-  rating: number;
-  comment: string | null;
-  created_at: string;
-}
-
-function mapReview(r: ApiReview): Review {
-  return {
-    id: r.id,
-    serviceId: r.service_id,
-    reviewerId: r.reviewer_id,
-    reviewerName: r.reviewer_name,
-    reviewerAvatar: r.reviewer_avatar ?? `https://i.pravatar.cc/150?u=${r.reviewer_id}`,
-    rating: r.rating,
-    comment: r.comment ?? "",
-    date: new Date(r.created_at).toLocaleDateString("tr-TR"),
-  };
-}
 
 export default function ServiceOwnerViewPage() {
   const { id } = useParams<{ id: string }>();
@@ -52,7 +29,7 @@ export default function ServiceOwnerViewPage() {
         api.get(`/api/reviews/service/${id}`),
       ]);
       setService(mapApiService(svc));
-      setReviews(Array.isArray(rvs) ? rvs.map(mapReview) : []);
+      setReviews(mapReviews(rvs));
     } catch {
       setError("Hizmet yüklenemedi.");
     } finally {
