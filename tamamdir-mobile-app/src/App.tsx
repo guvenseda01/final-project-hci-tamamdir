@@ -17,7 +17,12 @@ import ProfileManagePage from "./pages/ProfileManagePage";
 import ServiceOwnerViewPage from "./pages/ServiceOwnerViewPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, loading } = useAuth();
+  if (loading) return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
+    </div>
+  );
   return isLoggedIn ? <>{children}</> : <Navigate to="/login" replace />;
 }
 

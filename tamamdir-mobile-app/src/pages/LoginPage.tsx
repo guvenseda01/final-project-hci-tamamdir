@@ -12,7 +12,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; api?: string }>({});
   const [loading, setLoading] = useState(false);
 
   function validate() {
@@ -24,15 +24,20 @@ export default function LoginPage() {
     return errs;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setLoading(true);
-    setTimeout(() => {
-      login(email);
+    try {
+      await login(email, password);
       navigate("/");
-    }, 800);
+    } catch (err: unknown) {
+      const msg = (err as { message?: string }).message ?? "Giriş başarısız.";
+      setErrors({ api: msg === "Invalid credentials" ? "E-posta veya şifre hatalı." : msg });
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -63,6 +68,11 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-lg">
+          {errors.api && (
+            <div className="bg-error/10 border border-error/30 rounded-xl px-4 py-3 text-sm text-error">
+              {errors.api}
+            </div>
+          )}
           <div className="flex flex-col gap-gutter">
             <div className="flex flex-col gap-base">
               <label className="font-bold text-label-bold text-on-surface-variant px-1" htmlFor="email">
