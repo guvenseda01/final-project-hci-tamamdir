@@ -1,14 +1,11 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-
 function validateIyteEmail(email: string) {
   return email.endsWith("@iyte.edu.tr") || email.endsWith("@std.iyte.edu.tr");
 }
 
 export default function SignupPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
   const [form, setForm] = useState({ name: "", email: "", password: "", department: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -34,7 +31,7 @@ export default function SignupPage() {
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setLoading(true);
-    setTimeout(() => { login(form.email); navigate("/"); }, 800);
+    setTimeout(() => { navigate("/login"); }, 800);
   }
 
   return (

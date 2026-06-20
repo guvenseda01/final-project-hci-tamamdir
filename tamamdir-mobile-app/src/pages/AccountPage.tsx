@@ -39,11 +39,17 @@ export default function AccountPage() {
         {/* Profile Photo */}
         <div className="flex flex-col items-center pt-4 pb-2">
           <div className="relative mb-3">
-            <img
-              src={user?.avatar || "https://i.pravatar.cc/150?img=3"}
-              alt="Profil"
-              className="w-24 h-24 rounded-full object-cover border-4 border-primary-container"
-            />
+            {user?.avatar ? (
+              <img
+                src={user.avatar}
+                alt="Profil"
+                className="w-24 h-24 rounded-full object-cover border-4 border-primary-container"
+              />
+            ) : (
+              <div className="w-24 h-24 rounded-full border-4 border-primary-container bg-secondary-container flex items-center justify-center">
+                <span className="material-symbols-outlined text-on-secondary-container text-4xl">person</span>
+              </div>
+            )}
             <button className="absolute bottom-0 right-0 w-8 h-8 bg-primary text-on-primary rounded-full flex items-center justify-center shadow-md">
               <span className="material-symbols-outlined text-sm">photo_camera</span>
             </button>

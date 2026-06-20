@@ -51,11 +51,17 @@ export default function ProfilePage() {
           <div className="relative z-10 flex flex-col items-center text-center">
             <div className="relative mb-4">
               <div className="w-24 h-24 rounded-full border-4 border-primary-container p-1 bg-surface-container-lowest">
-                <img
-                  src={user?.avatar || "https://i.pravatar.cc/150?img=3"}
-                  alt="Profil"
-                  className="w-full h-full rounded-full object-cover"
-                />
+                {user?.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt="Profil"
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full rounded-full bg-secondary-container flex items-center justify-center">
+                    <span className="material-symbols-outlined text-on-secondary-container text-4xl">person</span>
+                  </div>
+                )}
               </div>
               <div className="absolute bottom-1 right-1 bg-primary-container text-on-primary-container rounded-full p-1 border-2 border-inverse-surface">
                 <span className="material-symbols-outlined fill-icon text-sm leading-none">verified</span>
