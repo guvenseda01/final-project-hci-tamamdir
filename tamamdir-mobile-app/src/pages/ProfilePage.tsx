@@ -30,7 +30,7 @@ export default function ProfilePage() {
 
   const privacyRows: SettingsRow[] = [
     { icon: "shield", label: "Güvenlik", sub: "Şifre, 2FA, Giriş Cihazları" },
-    { icon: "settings_account_box", label: "Hesap Yönetimi", sub: "Deaktif, Gizlilik, Veri", to: "/account" },
+    { icon: "settings_account_box", label: "Hesap Yönetimi", sub: "Bildirimler, Doğrulama, Veri", to: "/account/settings" },
   ];
 
   return (
