@@ -6,14 +6,9 @@ import { useAuth } from "../context/AuthContext";
 export default function ProfileManagePage() {
   const navigate = useNavigate();
   const { services } = useServices();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   const myServices = services.filter((s) => s.providerId === user?.id);
-
-  function handleLogout() {
-    logout();
-    navigate("/login");
-  }
 
   const statusLabel: Record<string, string> = {
     active: "AKTİF",
@@ -165,43 +160,6 @@ export default function ProfileManagePage() {
           )}
         </section>
 
-        {/* Account Settings */}
-        <section className="mt-xl px-margin-mobile pb-8">
-          <h3 className="font-label-bold text-label-bold text-on-surface-variant mb-md px-base uppercase tracking-widest">
-            Account Settings
-          </h3>
-          <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-xl overflow-hidden">
-            <button className="w-full flex items-center justify-between p-md active:bg-surface-container transition-colors border-b border-outline-variant/10">
-              <div className="flex items-center gap-md">
-                <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary">
-                  <span className="material-symbols-outlined">verified_user</span>
-                </div>
-                <span className="font-label-bold text-label-bold">Verify Identity</span>
-              </div>
-              <span className="material-symbols-outlined text-outline">chevron_right</span>
-            </button>
-            <button className="w-full flex items-center justify-between p-md active:bg-surface-container transition-colors border-b border-outline-variant/10">
-              <div className="flex items-center gap-md">
-                <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary">
-                  <span className="material-symbols-outlined">account_balance_wallet</span>
-                </div>
-                <span className="font-label-bold text-label-bold">Payout Methods</span>
-              </div>
-              <span className="material-symbols-outlined text-outline">chevron_right</span>
-            </button>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center justify-between p-md active:bg-surface-container transition-colors"
-            >
-              <div className="flex items-center gap-md">
-                <div className="w-10 h-10 rounded-full bg-error-container/20 flex items-center justify-center text-error">
-                  <span className="material-symbols-outlined">logout</span>
-                </div>
-                <span className="font-label-bold text-label-bold text-error">Logout</span>
-              </div>
-            </button>
-          </div>
-        </section>
       </main>
 
       <BottomNav />

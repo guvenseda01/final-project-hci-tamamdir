@@ -91,7 +91,10 @@ export default function HomePage() {
               <p className="text-emerald-100/90 text-sm mb-6">
                 Ders notların, hobi becerilerin veya uzmanlık alanın... Kampüste birileri tam da senin sunduğun hizmete ihtiyaç duyuyor olabilir.
               </p>
-              <button className="bg-white text-primary px-6 py-3 rounded-full font-bold hover:bg-emerald-50 transition-colors text-sm">
+              <button
+                onClick={() => navigate("/profile/manage")}
+                className="bg-white text-primary px-6 py-3 rounded-full font-bold hover:bg-emerald-50 transition-colors text-sm"
+              >
                 Hemen İlan Ver
               </button>
             </div>

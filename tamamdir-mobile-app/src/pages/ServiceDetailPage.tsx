@@ -5,26 +5,67 @@ import TamamdirButton from "../components/TamamdirButton";
 import Toast from "../components/Toast";
 import VerificationBadge from "../components/VerificationBadge";
 import { useServices } from "../context/ServicesContext";
+import { useAuth } from "../context/AuthContext";
+import api from "../lib/api";
 import type { Review } from "../data/types";
 
 export default function ServiceDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { services } = useServices();
+  const { user } = useAuth();
   const [favorited, setFavorited] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   const service = services.find((s) => s.id === id) ?? services[0];
   const reviews: Review[] = [];
   const moreServices = services.filter((s) => s.providerId === service?.providerId && s.id !== service?.id).slice(0, 3);
 
-  function handleTamamdir() {
-    setToastVisible(true);
+  async function handleTamamdir() {
+    if (!service) return;
+    if (user?.id === service.providerId) {
+      setToastMessage("Kendi hizmetinize mesaj gönderemezsiniz.");
+      setToastVisible(true);
+      return;
+    }
+    setSendingMessage(true);
+    try {
+      const conv: any = await api.post("/api/messages/conversations", {
+        recipient_id: service.providerId,
+      });
+      navigate("/messages", {
+        state: {
+          openConversation: {
+            id: conv.id,
+            participantId: service.providerId,
+            participantName: service.providerName,
+            participantAvatar: service.providerAvatar,
+            lastMessage: "",
+            lastTime: "",
+            unread: false,
+            messages: [],
+          },
+          serviceContext: {
+            id: service.id,
+            title: service.title,
+            price: service.price,
+            image: service.image,
+          },
+        },
+      });
+    } catch {
+      setToastMessage("Mesaj başlatılamadı, tekrar deneyin.");
+      setToastVisible(true);
+    } finally {
+      setSendingMessage(false);
+    }
   }
 
   return (
     <div className="bg-background min-h-screen max-w-md mx-auto pb-36">
-      <Toast message="Tamamdır! Mesajınız gönderildi." visible={toastVisible} onHide={() => setToastVisible(false)} />
+      <Toast message={toastMessage} visible={toastVisible} onHide={() => setToastVisible(false)} />
 
       {/* Glassmorphism Header */}
       <header
@@ -226,7 +267,10 @@ export default function ServiceDetailPage() {
 
       {/* Sticky CTA */}
       <div className="fixed bottom-0 left-0 right-0 px-margin-mobile z-[60] bg-white border-t border-slate-100 p-gutter pb-4 max-w-md mx-auto">
-        <TamamdirButton label="Tamamdır! Şimdi Rezervasyon Yap" onClick={handleTamamdir} />
+        <TamamdirButton
+          label={sendingMessage ? "Açılıyor..." : "Mesaj Gönder"}
+          onClick={handleTamamdir}
+        />
       </div>
 
       <BottomNav />

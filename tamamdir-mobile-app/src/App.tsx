@@ -17,6 +17,7 @@ import EditServicePage from "./pages/EditServicePage";
 import ProfileManagePage from "./pages/ProfileManagePage";
 import ServiceOwnerViewPage from "./pages/ServiceOwnerViewPage";
 import OnboardingPage from "./pages/OnboardingPage";
+import SecurityPage from "./pages/SecurityPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, loading } = useAuth();
@@ -46,6 +47,7 @@ function AppRoutes() {
       <Route path="/profile/manage" element={<RequireAuth><ProfileManagePage /></RequireAuth>} />
       <Route path="/account" element={<RequireAuth><AccountPage /></RequireAuth>} />
       <Route path="/account/settings" element={<RequireAuth><AccountSettingsPage /></RequireAuth>} />
+      <Route path="/account/security" element={<RequireAuth><SecurityPage /></RequireAuth>} />
       <Route path="/personalization" element={<RequireAuth><PersonalizationPage /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

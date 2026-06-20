@@ -3,12 +3,20 @@ import type { Conversation, Message } from "../data/types";
 import { useAuth } from "../context/AuthContext";
 import api from "../lib/api";
 
+interface ServiceContext {
+  id: string;
+  title: string;
+  price: string;
+  image: string;
+}
+
 interface ChatViewProps {
   conversation: Conversation;
+  serviceContext?: ServiceContext;
   onBack: () => void;
 }
 
-export default function ChatView({ conversation, onBack }: ChatViewProps) {
+export default function ChatView({ conversation, serviceContext, onBack }: ChatViewProps) {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>(conversation.messages);
   const [input, setInput] = useState("");
@@ -68,6 +76,27 @@ export default function ChatView({ conversation, onBack }: ChatViewProps) {
       </header>
 
       <div className="flex-1 pt-20 pb-20 overflow-y-auto px-4 space-y-3">
+        {serviceContext && (
+          <div className="mx-auto mt-2 mb-1 max-w-[85%]">
+            <p className="text-[10px] text-outline text-center mb-1.5 uppercase tracking-widest font-bold">İlan hakkında</p>
+            <div className="flex items-center gap-3 bg-white border border-outline-variant/20 rounded-2xl p-3 shadow-card">
+              <img
+                src={serviceContext.image}
+                alt={serviceContext.title}
+                className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+              />
+              <div className="min-w-0">
+                <p className="font-bold text-sm text-on-surface leading-tight line-clamp-2">{serviceContext.title}</p>
+                <p className="text-primary font-bold text-sm mt-0.5">{serviceContext.price}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mt-3 mb-1">
+              <div className="flex-1 h-px bg-outline-variant/20" />
+              <p className="text-[10px] text-outline uppercase tracking-widest font-bold">Mesajlar</p>
+              <div className="flex-1 h-px bg-outline-variant/20" />
+            </div>
+          </div>
+        )}
         {messages.map((msg) => {
           const isMe = msg.senderId === user?.id;
           return (

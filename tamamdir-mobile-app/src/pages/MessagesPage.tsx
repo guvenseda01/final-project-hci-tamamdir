@@ -1,13 +1,43 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import TopBar from "../components/TopBar";
 import BottomNav from "../components/BottomNav";
 import ChatView from "./ChatView";
 import type { Conversation } from "../data/types";
 import api from "../lib/api";
 
+type ServiceContext = { id: string; title: string; price: string; image: string };
+
+function saveServiceContext(convId: string, ctx: ServiceContext) {
+  try {
+    const all = JSON.parse(localStorage.getItem("conv_service_ctx") ?? "{}");
+    all[convId] = ctx;
+    localStorage.setItem("conv_service_ctx", JSON.stringify(all));
+  } catch {}
+}
+
+function loadServiceContext(convId: string): ServiceContext | null {
+  try {
+    const all = JSON.parse(localStorage.getItem("conv_service_ctx") ?? "{}");
+    return all[convId] ?? null;
+  } catch { return null; }
+}
+
 export default function MessagesPage() {
+  const location = useLocation();
+  const locationState = (location.state as any) ?? {};
   const [search, setSearch] = useState("");
-  const [activeChat, setActiveChat] = useState<Conversation | null>(null);
+
+  const [activeChat, setActiveChat] = useState<Conversation | null>(
+    locationState.openConversation ?? null
+  );
+  const [activeChatService, setActiveChatService] = useState<ServiceContext | null>(() => {
+    if (locationState.serviceContext && locationState.openConversation?.id) {
+      saveServiceContext(locationState.openConversation.id, locationState.serviceContext);
+      return locationState.serviceContext;
+    }
+    return null;
+  });
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
   useEffect(() => {
@@ -31,7 +61,13 @@ export default function MessagesPage() {
   }, []);
 
   if (activeChat) {
-    return <ChatView conversation={activeChat} onBack={() => setActiveChat(null)} />;
+    return (
+      <ChatView
+        conversation={activeChat}
+        serviceContext={activeChatService ?? undefined}
+        onBack={() => { setActiveChat(null); setActiveChatService(null); }}
+      />
+    );
   }
 
   const filtered = conversations.filter(
@@ -78,7 +114,7 @@ export default function MessagesPage() {
           {filtered.map((conv) => (
             <div
               key={conv.id}
-              onClick={() => setActiveChat(conv)}
+              onClick={() => { setActiveChat(conv); setActiveChatService(loadServiceContext(conv.id)); }}
               className="flex items-center gap-md p-md bg-surface-container-lowest rounded-xl shadow-card hover:bg-surface-container-low transition-colors cursor-pointer active:scale-[0.98] duration-150"
             >
               <div className="relative flex-shrink-0">
