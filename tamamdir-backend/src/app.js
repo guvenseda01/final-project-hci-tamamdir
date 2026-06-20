@@ -16,11 +16,26 @@ const swaggerSpecs = require('./config/swagger');
 
 const app = express();
 
-// Middleware
+// ──────────────────────────────────────────────────────────────────────────────
+// CORS Middleware (MUST be first, before auth and other middleware)
+// ──────────────────────────────────────────────────────────────────────────────
+const corsOrigin = process.env.CORS_ORIGIN || process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:5173';
 app.use(cors({
-  origin: process.env.CLIENT_URL || '*',
+  origin: corsOrigin,
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// Handle preflight requests explicitly (Express should auto-handle, but this ensures it)
+app.options('*', cors({
+  origin: corsOrigin,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+// Body parsing middleware (after CORS)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
