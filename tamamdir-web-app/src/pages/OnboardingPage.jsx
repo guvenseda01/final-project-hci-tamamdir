@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CheckCircle2, HelpCircle, AlertCircle, Loader2 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../context/AuthContext'
@@ -41,8 +41,10 @@ export default function OnboardingPage() {
   const [fetchError, setFetchError] = useState('')
   const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
-  const { user } = useAuth()
+  const { user, me } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const isFromProfile = searchParams.get('from') === 'profile'
 
   useEffect(() => {
     api.get('/api/categories')
@@ -50,6 +52,11 @@ export default function OnboardingPage() {
       .catch(() => setFetchError('Could not load categories. Check your connection and refresh.'))
       .finally(() => setLoadingCats(false))
   }, [])
+
+  useEffect(() => {
+    if (!user?.interests?.length) return
+    setSelected(new Set(user.interests.map(i => i.id)))
+  }, [user?.interests])
 
   const toggle = (id) => {
     setSelected(prev => {
@@ -59,12 +66,26 @@ export default function OnboardingPage() {
     })
   }
 
-  const handleContinue = async () => {
+  const handleCancel = () => {
+    if (isFromProfile) {
+      navigate('/profile', { state: { tab: 'personalization' } })
+    } else {
+      navigate('/home')
+    }
+  }
+
+  const handleSave = async () => {
+    if (!user?.id) return
     setSaveError('')
     setSaving(true)
     try {
       await api.put(`/api/users/${user.id}/interests`, { category_ids: [...selected] })
-      navigate('/home')
+      await me()
+      if (isFromProfile) {
+        navigate('/profile', { state: { interestsUpdated: true, tab: 'personalization' } })
+      } else {
+        navigate('/home')
+      }
     } catch (err) {
       setSaveError(err.message || 'Failed to save interests. Please try again.')
       setSaving(false)
@@ -85,14 +106,15 @@ export default function OnboardingPage() {
 
       <div className="flex-1 max-w-4xl mx-auto w-full px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Tell Us What You're Into</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            {isFromProfile ? 'Update Your Interests' : "Tell Us What You're Into"}
+          </h1>
           <p className="text-gray-500">
             Personalize your experience by selecting your interests. This helps us suggest
             the best campus services tailored just for you.
           </p>
         </div>
 
-        {/* Fetch error */}
         {fetchError && (
           <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 mb-6">
             <AlertCircle className="w-5 h-5 shrink-0" />
@@ -100,7 +122,6 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Loading skeleton */}
         {loadingCats && !fetchError && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 pb-28">
             {Array.from({ length: 12 }).map((_, i) => (
@@ -112,7 +133,6 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Category grid */}
         {!loadingCats && categories.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 pb-28">
             {categories.map((cat, i) => {
@@ -150,7 +170,6 @@ export default function OnboardingPage() {
         )}
       </div>
 
-      {/* Sticky bottom bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-4 shadow-lg">
         {saveError && (
           <div className="flex items-center gap-2 text-red-600 text-sm mb-3">
@@ -163,13 +182,13 @@ export default function OnboardingPage() {
             {selected.size} interest{selected.size !== 1 ? 's' : ''} selected
           </span>
           <button
-            onClick={() => navigate('/home')}
+            onClick={handleCancel}
             className="text-sm text-gray-500 font-medium hover:text-gray-700 px-4 py-2.5"
           >
-            Skip for Now
+            {isFromProfile ? 'Cancel' : 'Skip for Now'}
           </button>
           <button
-            onClick={handleContinue}
+            onClick={handleSave}
             disabled={saving || loadingCats}
             className={`btn-primary py-2.5 ${saving || loadingCats ? 'opacity-60 cursor-not-allowed' : ''}`}
           >
@@ -178,7 +197,7 @@ export default function OnboardingPage() {
             ) : (
               <CheckCircle2 className="w-4 h-4" />
             )}
-            {saving ? 'Saving…' : 'Continue'}
+            {saving ? 'Saving…' : isFromProfile ? 'Save' : 'Continue'}
           </button>
         </div>
       </div>

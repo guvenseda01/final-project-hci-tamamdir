@@ -13,6 +13,8 @@ function sanitizeUser(user) {
     ...rest,
     email_verified: emailVerified,
     is_verified_student: studentEligible && emailVerified,
+    is_active: user.is_active !== 0,
+    is_deleted: user.deleted_at != null,
   };
 }
 

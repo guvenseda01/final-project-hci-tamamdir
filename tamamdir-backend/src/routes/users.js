@@ -217,11 +217,14 @@ router.get('/:id', async (req, res, next) => {
   try {
     const user = await get(
       `SELECT id, full_name, avatar_url, bio, department, year,
-              is_verified, is_verified_student, is_provider, rating, review_count, created_at
+              is_verified, is_verified_student, is_provider, rating, review_count, created_at,
+              is_active, deleted_at
        FROM users WHERE id = ?`,
       [req.params.id]
     );
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user || user.deleted_at || !user.is_active) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     const interests = await all(
       `SELECT c.id, c.name, c.icon, c.slug

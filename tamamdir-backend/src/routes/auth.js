@@ -266,6 +266,10 @@ router.post(
         });
       }
 
+      if (user.deleted_at) {
+        return res.status(403).json({ error: 'This account has been deleted' });
+      }
+
       const token = signToken({ id: user.id, email: user.email });
       return res.json({ token, user: sanitizeUser(user) });
     } catch (err) {
@@ -381,6 +385,7 @@ router.get('/me', requireAuth, async (req, res, next) => {
   try {
     const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
     if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.deleted_at) return res.status(403).json({ error: 'This account has been deleted' });
 
     // Include interests
     const interests = await require('../config/database').all(
@@ -392,6 +397,99 @@ router.get('/me', requireAuth, async (req, res, next) => {
     );
 
     return res.json({ ...sanitizeUser(user), interests });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── PATCH /api/auth/password ────────────────────────────────────────────────
+router.patch(
+  '/password',
+  requireAuth,
+  [
+    body('current_password').notEmpty().withMessage('Current password is required'),
+    body('new_password').isLength({ min: 8 }).withMessage('New password must be at least 8 characters'),
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
+
+    try {
+      const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+      if (!user || user.deleted_at) return res.status(404).json({ error: 'User not found' });
+
+      const valid = await bcrypt.compare(req.body.current_password, user.password_hash);
+      if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
+
+      const passwordHash = await bcrypt.hash(req.body.new_password, 12);
+      await run('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?', [
+        passwordHash,
+        req.user.id,
+      ]);
+
+      return res.json({ message: 'Password updated successfully' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── POST /api/auth/deactivate ─────────────────────────────────────────────────
+router.post('/deactivate', requireAuth, async (req, res, next) => {
+  try {
+    const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    if (!user || user.deleted_at) return res.status(404).json({ error: 'User not found' });
+    if (!user.is_active) return res.status(400).json({ error: 'Account is already deactivated' });
+
+    await run('UPDATE users SET is_active = 0, updated_at = NOW() WHERE id = ?', [req.user.id]);
+    await run(
+      'UPDATE services SET is_active = 0, updated_at = NOW() WHERE provider_id = ? AND is_active = 1',
+      [req.user.id]
+    );
+
+    const updated = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    return res.json(sanitizeUser(updated));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /api/auth/reactivate ───────────────────────────────────────────────
+router.post('/reactivate', requireAuth, async (req, res, next) => {
+  try {
+    const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    if (!user || user.deleted_at) return res.status(404).json({ error: 'User not found' });
+    if (user.is_active) return res.status(400).json({ error: 'Account is already active' });
+
+    await run('UPDATE users SET is_active = 1, updated_at = NOW() WHERE id = ?', [req.user.id]);
+    await run(
+      'UPDATE services SET is_active = 1, updated_at = NOW() WHERE provider_id = ?',
+      [req.user.id]
+    );
+
+    const updated = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    return res.json(sanitizeUser(updated));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── DELETE /api/auth/account ────────────────────────────────────────────────
+router.delete('/account', requireAuth, async (req, res, next) => {
+  try {
+    const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    if (!user || user.deleted_at) return res.status(404).json({ error: 'User not found' });
+
+    await run(
+      'UPDATE users SET is_active = 0, deleted_at = NOW(), updated_at = NOW() WHERE id = ?',
+      [req.user.id]
+    );
+    await run(
+      'UPDATE services SET is_active = 0, updated_at = NOW() WHERE provider_id = ?',
+      [req.user.id]
+    );
+
+    return res.json({ message: 'Account deleted successfully' });
   } catch (err) {
     next(err);
   }
