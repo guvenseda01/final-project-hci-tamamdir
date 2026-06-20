@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import TopBar from "../components/TopBar";
+import NotificationsDropdown from "../components/NotificationsDropdown";
+import ProfileMenuDropdown from "../components/ProfileMenuDropdown";
 import BottomNav from "../components/BottomNav";
 import ChatView from "./ChatView";
 import type { Conversation } from "../data/types";
@@ -80,13 +82,9 @@ export default function MessagesPage() {
     <div className="bg-background min-h-screen max-w-md mx-auto">
       <TopBar
         rightContent={
-          <div className="flex gap-1">
-            <button className="p-2 hover:bg-slate-50 rounded-full transition-colors">
-              <span className="material-symbols-outlined text-slate-500">notifications</span>
-            </button>
-            <button className="p-2 hover:bg-slate-50 rounded-full transition-colors">
-              <span className="material-symbols-outlined text-slate-500">settings</span>
-            </button>
+          <div className="flex items-center gap-1">
+            <NotificationsDropdown />
+            <ProfileMenuDropdown />
           </div>
         }
       />

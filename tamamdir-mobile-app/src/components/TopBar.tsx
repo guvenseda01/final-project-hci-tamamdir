@@ -1,21 +1,50 @@
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import ProfileMenuDropdown from "./ProfileMenuDropdown";
+import NotificationsDropdown from "./NotificationsDropdown";
+import HeaderActionButtons from "./HeaderActionButtons";
 
 interface TopBarProps {
   showBack?: boolean;
   title?: string;
   rightContent?: React.ReactNode;
+  showNotifications?: boolean;
+  showHelp?: boolean;
+  showProfileMenu?: boolean;
 }
 
-export default function TopBar({ showBack, title, rightContent }: TopBarProps) {
+export default function TopBar({
+  showBack,
+  title,
+  rightContent,
+  showNotifications = true,
+  showHelp = false,
+  showProfileMenu = true,
+}: TopBarProps) {
   const navigate = useNavigate();
-  const { user } = useAuth();
+
+  const defaultRight = (
+    <div className="flex items-center gap-1">
+      {showNotifications && <NotificationsDropdown />}
+      {showHelp && (
+        <button
+          type="button"
+          onClick={() => navigate("/help")}
+          className="p-2 hover:bg-slate-50 active:bg-slate-100 transition-colors rounded-full"
+          aria-label="Yardım merkezi"
+        >
+          <span className="material-symbols-outlined text-slate-500">help</span>
+        </button>
+      )}
+      {showProfileMenu && <ProfileMenuDropdown />}
+    </div>
+  );
 
   return (
     <header className="bg-white border-b border-slate-100 shadow-sm fixed top-0 left-0 right-0 z-[100] h-16 flex items-center px-4 max-w-md mx-auto">
-      <div className="flex items-center gap-3 flex-1">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
         {showBack ? (
           <button
+            type="button"
             onClick={() => navigate(-1)}
             className="p-1 -ml-1 rounded-full hover:bg-slate-100 active:scale-95 transition-all"
           >
@@ -24,19 +53,11 @@ export default function TopBar({ showBack, title, rightContent }: TopBarProps) {
         ) : (
           <span className="material-symbols-outlined text-primary">school</span>
         )}
-        <span className="text-primary font-extrabold tracking-tight text-lg">
+        <span className="text-primary font-extrabold tracking-tight text-lg truncate">
           {title || "Tamamdır!"}
         </span>
       </div>
-      {rightContent || (
-        <div className="w-8 h-8 rounded-full bg-secondary-container overflow-hidden flex items-center justify-center">
-          {user?.avatar ? (
-            <img src={user.avatar} alt="Profil" className="w-full h-full object-cover" />
-          ) : (
-            <span className="material-symbols-outlined text-on-secondary-container text-xl">person</span>
-          )}
-        </div>
-      )}
+      {rightContent ?? defaultRight}
     </header>
   );
 }

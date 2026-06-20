@@ -30,11 +30,24 @@ export default function LoginPage() {
       const done = localStorage.getItem("onboarding_done");
       navigate(done ? "/" : "/onboarding");
     } catch (err: unknown) {
-      const msg = (err as { message?: string }).message ?? "";
+      const e = err as {
+        message?: string;
+        status?: number;
+        data?: { needs_verification?: boolean; email?: string };
+      };
+      if (e.status === 403 && e.data?.needs_verification) {
+        navigate("/verify-email", {
+          state: { email: e.data.email ?? email, expiresInMinutes: 15 },
+        });
+        return;
+      }
+      const msg = e.message ?? "";
       if (!msg || msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {
         setErrors({ api: "Sunucuya bağlanılamadı. Backend'in çalıştığından emin olun." });
       } else if (msg === "Invalid credentials") {
         setErrors({ api: "E-posta veya şifre hatalı." });
+      } else if (msg === "Email not verified") {
+        navigate("/verify-email", { state: { email, expiresInMinutes: 15 } });
       } else {
         setErrors({ api: msg || "Giriş başarısız." });
       }

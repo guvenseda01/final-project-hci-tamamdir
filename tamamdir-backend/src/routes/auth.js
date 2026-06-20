@@ -164,6 +164,37 @@ const {
 // Keep Gmail dots — Resend test mode matches the exact account email
 const EMAIL_NORM = { gmail_remove_dots: false, gmail_remove_subaddress: false };
 
+async function buildAuthProfile(user, { includeInterests = false } = {}) {
+  const [completedRow, activeRow] = await Promise.all([
+    get(
+      `SELECT COUNT(*) AS n FROM orders WHERE provider_id = ? AND status = 'completed'`,
+      [user.id]
+    ),
+    get(
+      `SELECT COUNT(*) AS n FROM services WHERE provider_id = ? AND is_active = 1`,
+      [user.id]
+    ),
+  ]);
+
+  const profile = {
+    ...sanitizeUser(user),
+    completed_orders: parseInt(completedRow?.n ?? 0, 10),
+    active_services: parseInt(activeRow?.n ?? 0, 10),
+  };
+
+  if (includeInterests) {
+    profile.interests = await require('../config/database').all(
+      `SELECT c.id, c.name, c.icon, c.slug
+       FROM user_interests ui
+       JOIN categories c ON c.id = ui.category_id
+       WHERE ui.user_id = ?`,
+      [user.id]
+    );
+  }
+
+  return profile;
+}
+
 async function createAndSendVerificationCode(user) {
   const code = generateCode();
   const codeHash = hashCode(code);
@@ -271,7 +302,8 @@ router.post(
       }
 
       const token = signToken({ id: user.id, email: user.email });
-      return res.json({ token, user: sanitizeUser(user) });
+      const profile = await buildAuthProfile(user);
+      return res.json({ token, user: profile });
     } catch (err) {
       next(err);
     }
@@ -300,10 +332,11 @@ router.post(
 
       if (user.is_verified) {
         const token = signToken({ id: user.id, email: user.email });
+        const profile = await buildAuthProfile(user);
         return res.json({
           message: 'Email already verified',
           token,
-          user: sanitizeUser(user),
+          user: profile,
           needs_interests: true,
         });
       }
@@ -333,11 +366,12 @@ router.post(
 
       const updated = await get('SELECT * FROM users WHERE id = ?', [user.id]);
       const token = signToken({ id: updated.id, email: updated.email });
+      const profile = await buildAuthProfile(updated);
 
       return res.json({
         message: 'Email verified successfully',
         token,
-        user: sanitizeUser(updated),
+        user: profile,
         needs_interests: true,
       });
     } catch (err) {
@@ -387,16 +421,7 @@ router.get('/me', requireAuth, async (req, res, next) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (user.deleted_at) return res.status(403).json({ error: 'This account has been deleted' });
 
-    // Include interests
-    const interests = await require('../config/database').all(
-      `SELECT c.id, c.name, c.icon, c.slug
-       FROM user_interests ui
-       JOIN categories c ON c.id = ui.category_id
-       WHERE ui.user_id = ?`,
-      [user.id]
-    );
-
-    return res.json({ ...sanitizeUser(user), interests });
+    return res.json(await buildAuthProfile(user, { includeInterests: true }));
   } catch (err) {
     next(err);
   }

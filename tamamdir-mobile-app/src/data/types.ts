@@ -25,6 +25,9 @@ export interface Service {
   providerVerified: boolean;
   rating: number;
   reviewCount: number;
+  orderCount: number;
+  priceUnit: string;
+  coverImageId?: string;
   image: string;
   tags: string[];
   deliveryDays: number;

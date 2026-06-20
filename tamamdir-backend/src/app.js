@@ -10,6 +10,8 @@ const orderRoutes = require('./routes/orders');
 const messageRoutes = require('./routes/messages');
 const reviewRoutes = require('./routes/reviews');
 const categoryRoutes = require('./routes/categories');
+const notificationRoutes = require('./routes/notifications');
+const favoriteRoutes = require('./routes/favorites');
 
 const { errorHandler } = require('./middleware/errorHandler');
 const swaggerSpecs = require('./config/swagger');
@@ -49,6 +51,8 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/favorites', favoriteRoutes);
 
 // 404 handler
 app.use((req, res) => {
