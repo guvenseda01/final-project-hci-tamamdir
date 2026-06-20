@@ -36,9 +36,6 @@ export default function ServiceDetailPage() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
-  const [showOrderModal, setShowOrderModal] = useState(false);
-  const [orderNote, setOrderNote] = useState("");
-  const [placingOrder, setPlacingOrder] = useState(false);
   const [reviewableOrderId, setReviewableOrderId] = useState<string | null>(null);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
@@ -121,41 +118,6 @@ export default function ServiceDetailPage() {
     }
   }
 
-  async function handlePlaceOrder() {
-    if (!service || !id || placingOrder) return;
-    if (user?.id === service.providerId) {
-      setToastMessage("Kendi hizmetinize sipariş veremezsiniz.");
-      setToastVisible(true);
-      return;
-    }
-    if ((service.status ?? "active") !== "active") {
-      setToastMessage("Bu ilan şu an sipariş almıyor.");
-      setToastVisible(true);
-      return;
-    }
-
-    setPlacingOrder(true);
-    try {
-      await api.post("/api/orders", {
-        service_id: id,
-        note: orderNote.trim() || undefined,
-      });
-      setShowOrderModal(false);
-      setOrderNote("");
-      setToastMessage("Siparişin oluşturuldu! Sağlayıcı onaylayınca bilgilendirileceksin.");
-      setToastVisible(true);
-      setTimeout(() => navigate("/history"), 1200);
-    } catch (err: unknown) {
-      const msg = (err as { data?: { error?: string }; message?: string }).data?.error
-        ?? (err as { message?: string }).message
-        ?? "Sipariş oluşturulamadı.";
-      setToastMessage(msg);
-      setToastVisible(true);
-    } finally {
-      setPlacingOrder(false);
-    }
-  }
-
   async function handleMessage() {
     if (!service) return;
     if (user?.id === service.providerId) {
@@ -185,6 +147,7 @@ export default function ServiceDetailPage() {
             title: service.title,
             price: service.price,
             image: service.image,
+            providerId: service.providerId,
           },
         },
       });
@@ -285,7 +248,7 @@ export default function ServiceDetailPage() {
           <div className="bg-surface-container-lowest rounded-xl p-md shadow-card border border-slate-100">
             <div className="flex justify-between items-start mb-base">
               <div className="space-y-1">
-                <VerificationBadge small />
+                {service.providerVerified && <VerificationBadge small />}
                 <h1 className="font-bold text-xl text-on-surface">{service.title}</h1>
               </div>
               <div className="text-right">
@@ -520,54 +483,17 @@ export default function ServiceDetailPage() {
         )}
       </main>
 
-      {/* Sticky CTA */}
-      <div className="fixed bottom-0 left-0 right-0 px-margin-mobile z-[60] bg-white border-t border-slate-100 p-gutter pb-4 max-w-md mx-auto space-y-2">
+      {/* Sticky CTA — web gibi: mesajla başla, sipariş sohbette */}
+      <div className="fixed bottom-0 left-0 right-0 px-margin-mobile z-[60] bg-white border-t border-slate-100 p-gutter pb-4 max-w-md mx-auto">
         <TamamdirButton
-          label={placingOrder ? "Gönderiliyor..." : "Sipariş Ver"}
-          onClick={() => setShowOrderModal(true)}
-          disabled={placingOrder || user?.id === service.providerId || (service.status ?? "active") !== "active"}
-        />
-        <button
-          type="button"
+          label={sendingMessage ? "Açılıyor..." : "Mesaj Gönder"}
           onClick={handleMessage}
           disabled={sendingMessage || user?.id === service.providerId}
-          className="w-full py-3 text-primary font-bold text-sm active:opacity-70 disabled:opacity-50"
-        >
-          {sendingMessage ? "Açılıyor..." : "Mesaj Gönder"}
-        </button>
+        />
+        <p className="text-xs text-on-surface-variant text-center mt-2">
+          Sohbette Tamamdır! ile sipariş verebilirsin.
+        </p>
       </div>
-
-      {showOrderModal && (
-        <div className="fixed inset-0 z-[70] bg-black/40 flex items-end max-w-md mx-auto">
-          <div className="w-full bg-white rounded-t-3xl p-6 space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="font-bold text-lg text-on-surface">Sipariş Oluştur</h3>
-              <button type="button" onClick={() => setShowOrderModal(false)} className="text-on-surface-variant">
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <div className="bg-surface-container-low rounded-xl p-3 flex justify-between items-center">
-              <div>
-                <p className="font-bold text-sm">{service.title}</p>
-                <p className="text-on-surface-variant text-xs">{service.providerName}</p>
-              </div>
-              <p className="font-bold text-primary">{service.price}</p>
-            </div>
-            <textarea
-              value={orderNote}
-              onChange={(e) => setOrderNote(e.target.value)}
-              placeholder="Sağlayıcıya not bırak (isteğe bağlı)"
-              rows={3}
-              className="w-full p-3 rounded-xl border border-outline-variant/30 text-sm resize-none outline-none focus:border-primary"
-            />
-            <TamamdirButton
-              label={placingOrder ? "Oluşturuluyor..." : "Siparişi Onayla"}
-              onClick={handlePlaceOrder}
-              disabled={placingOrder}
-            />
-          </div>
-        </div>
-      )}
 
       <BottomNav />
       </>

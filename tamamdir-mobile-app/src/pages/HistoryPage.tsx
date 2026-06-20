@@ -7,12 +7,12 @@ import Toast from "../components/Toast";
 import type { ServiceHistory } from "../data/types";
 import api from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { getOrderActions, mapOrder, ORDER_STATUS_LABEL, type OrderAction } from "../lib/orderMapper";
+import { mapOrder, ORDER_STATUS_LABEL } from "../lib/orderMapper";
 
 type Tab = "requested" | "provided";
 
 export default function HistoryPage() {
-  const { user, refreshUser } = useAuth();
+  const { user } = useAuth();
   const [tab, setTab] = useState<Tab>("requested");
   const [history, setHistory] = useState<ServiceHistory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,7 +20,6 @@ export default function HistoryPage() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
@@ -65,45 +64,6 @@ export default function HistoryPage() {
       setToastVisible(true);
     } finally {
       setSubmittingReview(false);
-    }
-  }
-
-  async function runOrderAction(orderId: string, action: OrderAction) {
-    if (actionLoadingId) return;
-
-    if (action === "cancel") {
-      const ok = window.confirm("Bu siparişi iptal etmek istediğine emin misin?");
-      if (!ok) return;
-    }
-
-    setActionLoadingId(orderId);
-    try {
-      const path =
-        action === "accept" ? "accept"
-        : action === "start" ? "start"
-        : action === "complete" ? "complete"
-        : "cancel";
-
-      await api.patch(`/api/orders/${orderId}/${path}`, action === "cancel" ? {} : undefined);
-
-      const labels: Record<OrderAction, string> = {
-        accept: "Sipariş kabul edildi.",
-        start: "Sipariş başlatıldı.",
-        complete: "Sipariş tamamlandı.",
-        cancel: "Sipariş iptal edildi.",
-      };
-      setToastMessage(labels[action]);
-      setToastVisible(true);
-      await loadHistory();
-      await refreshUser();
-    } catch (err: unknown) {
-      const msg = (err as { data?: { error?: string }; message?: string }).data?.error
-        ?? (err as { message?: string }).message
-        ?? "İşlem yapılamadı.";
-      setToastMessage(msg);
-      setToastVisible(true);
-    } finally {
-      setActionLoadingId(null);
     }
   }
 
@@ -184,8 +144,6 @@ export default function HistoryPage() {
               const statusInfo = ORDER_STATUS_LABEL[item.status];
               const canReview = item.type === "requested" && item.status === "completed" && !item.hasReview;
               const isReviewOpen = reviewingId === item.id;
-              const actions = getOrderActions(item);
-              const isActionLoading = actionLoadingId === item.id;
 
               return (
                 <div
@@ -233,28 +191,6 @@ export default function HistoryPage() {
                       </div>
                     </div>
                   </div>
-
-                  {actions.length > 0 && (
-                    <div className="px-md pb-md flex flex-wrap gap-2">
-                      {actions.map(({ action, label, primary, danger }) => (
-                        <button
-                          key={action}
-                          type="button"
-                          disabled={isActionLoading}
-                          onClick={() => runOrderAction(item.id, action)}
-                          className={`flex-1 min-w-[120px] py-2.5 rounded-xl font-bold text-sm disabled:opacity-60 ${
-                            primary
-                              ? "bg-primary text-on-primary"
-                              : danger
-                                ? "border border-error/30 text-error bg-error/5"
-                                : "border border-primary/20 text-primary"
-                          }`}
-                        >
-                          {isActionLoading ? "..." : label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
 
                   {canReview && !isReviewOpen && (
                     <div className="px-md pb-md">
