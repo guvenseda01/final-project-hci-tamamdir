@@ -1,14 +1,208 @@
 /**
- * /api/users
- *
- * GET    /api/users/:id               – public profile
- * PATCH  /api/users/:id               – update profile (own only)
- * POST   /api/users/:id/avatar        – upload avatar (own only)
- * GET    /api/users/:id/interests     – list interests
- * PUT    /api/users/:id/interests     – replace all interests (onboarding)
- * GET    /api/users/:id/services      – services offered by user
- * GET    /api/users/:id/orders        – order history (buyer + seller)
+ * @swagger
+ * tags:
+ *   - name: Users
+ *     description: User profiles and preferences
  */
+
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   get:
+ *     tags: [Users]
+ *     summary: Get user public profile
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       404:
+ *         description: User not found
+ *   patch:
+ *     tags: [Users]
+ *     summary: Update user profile
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               full_name:
+ *                 type: string
+ *               bio:
+ *                 type: string
+ *               department:
+ *                 type: string
+ *               year:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Profile updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ */
+
+/**
+ * @swagger
+ * /api/users/{id}/avatar:
+ *   post:
+ *     tags: [Users]
+ *     summary: Upload user avatar
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Avatar uploaded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Unauthorized
+ *       413:
+ *         description: File too large
+ */
+
+/**
+ * @swagger
+ * /api/users/{id}/interests:
+ *   get:
+ *     tags: [Users]
+ *     summary: Get user interests
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of interests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Category'
+ *   put:
+ *     tags: [Users]
+ *     summary: Update user interests
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [category_ids]
+ *             properties:
+ *               category_ids:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Interests updated
+ *       401:
+ *         description: Unauthorized
+ */
+
+/**
+ * @swagger
+ * /api/users/{id}/services:
+ *   get:
+ *     tags: [Users]
+ *     summary: Get services offered by user
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of services
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Service'
+ */
+
+/**
+ * @swagger
+ * /api/users/{id}/orders:
+ *   get:
+ *     tags: [Users]
+ *     summary: Get user order history
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of orders
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Order'
+ *       401:
+ *         description: Unauthorized
+ */
+
 const router = require('express').Router();
 const { body, param, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
@@ -72,7 +266,7 @@ router.patch(
 
       if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
-      updates.push("updated_at = datetime('now')");
+      updates.push("updated_at = NOW()");
       values.push(req.params.id);
 
       await run(
@@ -141,7 +335,7 @@ router.put('/:id/interests', requireAuth, async (req, res, next) => {
     await run('DELETE FROM user_interests WHERE user_id = ?', [req.params.id]);
     for (const cid of category_ids) {
       await run(
-        'INSERT OR IGNORE INTO user_interests (user_id, category_id) VALUES (?, ?)',
+        'INSERT INTO user_interests (user_id, category_id) VALUES (?, ?) ON CONFLICT DO NOTHING',
         [req.params.id, cid]
       );
     }

@@ -1,14 +1,213 @@
 /**
- * /api/orders
- *
- * POST   /               – place an order (buyer)
- * GET    /               – list my orders (auth, ?role=buyer|provider)
- * GET    /:id            – get single order (auth, own only)
- * PATCH  /:id/accept     – provider accepts
- * PATCH  /:id/start      – provider starts work → in_progress
- * PATCH  /:id/complete   – provider marks done → completed
- * PATCH  /:id/cancel     – buyer or provider cancels
+ * @swagger
+ * tags:
+ *   - name: Orders
+ *     description: Service orders and transactions
  */
+
+/**
+ * @swagger
+ * /api/orders:
+ *   post:
+ *     tags: [Orders]
+ *     summary: Place a new order
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [service_id]
+ *             properties:
+ *               service_id:
+ *                 type: string
+ *               note:
+ *                 type: string
+ *               scheduled_at:
+ *                 type: string
+ *                 format: date-time
+ *     responses:
+ *       201:
+ *         description: Order placed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Order'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Service not found
+ *   get:
+ *     tags: [Orders]
+ *     summary: Get user orders
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: role
+ *         schema:
+ *           type: string
+ *           enum: [buyer, provider]
+ *         description: Filter by role
+ *     responses:
+ *       200:
+ *         description: List of orders
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Order'
+ *       401:
+ *         description: Unauthorized
+ */
+
+/**
+ * @swagger
+ * /api/orders/{id}:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Get order details
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Order details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Order'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ */
+
+/**
+ * @swagger
+ * /api/orders/{id}/accept:
+ *   patch:
+ *     tags: [Orders]
+ *     summary: Accept order (provider only)
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Order accepted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Order'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ */
+
+/**
+ * @swagger
+ * /api/orders/{id}/start:
+ *   patch:
+ *     tags: [Orders]
+ *     summary: Start work on order
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Order started
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Order'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ */
+
+/**
+ * @swagger
+ * /api/orders/{id}/complete:
+ *   patch:
+ *     tags: [Orders]
+ *     summary: Mark order as completed
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Order completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Order'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ */
+
+/**
+ * @swagger
+ * /api/orders/{id}/cancel:
+ *   patch:
+ *     tags: [Orders]
+ *     summary: Cancel order
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Order cancelled
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Order'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ */
+
 const router = require('express').Router();
 const { body, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
@@ -142,7 +341,7 @@ router.patch('/:id/complete', requireAuth, async (req, res, next) => {
 
     await run(
       `UPDATE orders
-       SET status = 'completed', completed_at = datetime('now'), updated_at = datetime('now')
+       SET status = 'completed', completed_at = NOW(), updated_at = NOW()
        WHERE id = ?`,
       [order.id]
     );
@@ -192,8 +391,8 @@ router.patch(
 
       await run(
         `UPDATE orders
-         SET status = 'cancelled', cancelled_at = datetime('now'),
-             cancel_reason = ?, updated_at = datetime('now')
+         SET status = 'cancelled', cancelled_at = NOW(),
+             cancel_reason = ?, updated_at = NOW()
          WHERE id = ?`,
         [req.body.reason || null, order.id]
       );
@@ -228,7 +427,7 @@ async function transitionOrder(req, res, next, newStatus, authCheck) {
     }
 
     await run(
-      `UPDATE orders SET status = ?, updated_at = datetime('now') WHERE id = ?`,
+      `UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?`,
       [newStatus, order.id]
     );
 

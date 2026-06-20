@@ -1,53 +1,28 @@
-/**
- * database.js
- * Uses Node.js 22+ built-in `node:sqlite` (no native dependencies needed).
- *
- * Schema covers every entity visible in the Tamamdır page designs:
- *   users · user_interests · categories · services · service_images
- *   orders · messages · conversations · reviews · notifications
- */
+const { Pool } = require('pg');
 
-const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
+let pool;
 
-let db;
-
-// ---------------------------------------------------------------------------
-// Promisified helpers (the built-in is synchronous; wrap for consistent API)
-// ---------------------------------------------------------------------------
-function run(sql, params = []) {
-  try {
-    const stmt   = db.prepare(sql);
-    const result = stmt.run(...params);
-    return Promise.resolve({ lastID: result.lastInsertRowid, changes: result.changes });
-  } catch (err) {
-    return Promise.reject(err);
-  }
+// Convert SQLite ? placeholders to PostgreSQL $1, $2, … notation
+function toPostgres(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
 }
 
-function get(sql, params = []) {
-  try {
-    const stmt = db.prepare(sql);
-    const row  = stmt.get(...params);
-    return Promise.resolve(row ?? null);
-  } catch (err) {
-    return Promise.reject(err);
-  }
+async function run(sql, params = []) {
+  const result = await pool.query(toPostgres(sql), params);
+  return { rowCount: result.rowCount };
 }
 
-function all(sql, params = []) {
-  try {
-    const stmt = db.prepare(sql);
-    const rows = stmt.all(...params);
-    return Promise.resolve(rows);
-  } catch (err) {
-    return Promise.reject(err);
-  }
+async function get(sql, params = []) {
+  const result = await pool.query(toPostgres(sql), params);
+  return result.rows[0] ?? null;
 }
 
-// ---------------------------------------------------------------------------
-// Schema (split on ; and exec each statement)
-// ---------------------------------------------------------------------------
+async function all(sql, params = []) {
+  const result = await pool.query(toPostgres(sql), params);
+  return result.rows;
+}
+
 const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS users (
     id               TEXT PRIMARY KEY,
@@ -64,8 +39,8 @@ const SCHEMA_STATEMENTS = [
     total_earnings   REAL DEFAULT 0.0,
     rating           REAL DEFAULT 0.0,
     review_count     INTEGER DEFAULT 0,
-    created_at       TEXT DEFAULT (datetime('now')),
-    updated_at       TEXT DEFAULT (datetime('now'))
+    created_at       TIMESTAMPTZ DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS categories (
     id    TEXT PRIMARY KEY,
@@ -91,8 +66,8 @@ const SCHEMA_STATEMENTS = [
     rating        REAL DEFAULT 0.0,
     review_count  INTEGER DEFAULT 0,
     order_count   INTEGER DEFAULT 0,
-    created_at    TEXT DEFAULT (datetime('now')),
-    updated_at    TEXT DEFAULT (datetime('now'))
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS service_images (
     id         TEXT PRIMARY KEY,
@@ -100,7 +75,7 @@ const SCHEMA_STATEMENTS = [
     image_url  TEXT NOT NULL,
     is_cover   INTEGER DEFAULT 0,
     sort_order INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS orders (
     id              TEXT PRIMARY KEY,
@@ -110,20 +85,20 @@ const SCHEMA_STATEMENTS = [
     status          TEXT NOT NULL DEFAULT 'pending',
     price_at_order  REAL NOT NULL,
     note            TEXT,
-    scheduled_at    TEXT,
-    completed_at    TEXT,
-    cancelled_at    TEXT,
+    scheduled_at    TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    cancelled_at    TIMESTAMPTZ,
     cancel_reason   TEXT,
-    created_at      TEXT DEFAULT (datetime('now')),
-    updated_at      TEXT DEFAULT (datetime('now'))
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS conversations (
     id            TEXT PRIMARY KEY,
     participant_a TEXT NOT NULL REFERENCES users(id),
     participant_b TEXT NOT NULL REFERENCES users(id),
     last_message  TEXT,
-    last_msg_at   TEXT,
-    created_at    TEXT DEFAULT (datetime('now')),
+    last_msg_at   TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (participant_a, participant_b)
   )`,
   `CREATE TABLE IF NOT EXISTS messages (
@@ -132,7 +107,7 @@ const SCHEMA_STATEMENTS = [
     sender_id       TEXT NOT NULL REFERENCES users(id),
     content         TEXT NOT NULL,
     is_read         INTEGER DEFAULT 0,
-    created_at      TEXT DEFAULT (datetime('now'))
+    created_at      TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS reviews (
     id          TEXT PRIMARY KEY,
@@ -142,7 +117,7 @@ const SCHEMA_STATEMENTS = [
     provider_id TEXT NOT NULL REFERENCES users(id),
     rating      INTEGER NOT NULL,
     comment     TEXT,
-    created_at  TEXT DEFAULT (datetime('now'))
+    created_at  TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS notifications (
     id         TEXT PRIMARY KEY,
@@ -152,7 +127,7 @@ const SCHEMA_STATEMENTS = [
     body       TEXT,
     is_read    INTEGER DEFAULT 0,
     ref_id     TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE INDEX IF NOT EXISTS idx_services_provider ON services(provider_id)`,
   `CREATE INDEX IF NOT EXISTS idx_services_category ON services(category_id)`,
@@ -163,13 +138,10 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_notifs_user       ON notifications(user_id, is_read)`,
 ];
 
-// ---------------------------------------------------------------------------
-// Seed
-// ---------------------------------------------------------------------------
 async function seed() {
   const { v4: uuidv4 } = require('uuid');
   const row = await get('SELECT COUNT(*) AS n FROM categories');
-  if (row && row.n > 0) return;
+  if (row && parseInt(row.n) > 0) return;
 
   const cats = [
     { name: 'Coding Lessons',     icon: 'code',              slug: 'coding-lessons'     },
@@ -188,27 +160,22 @@ async function seed() {
 
   for (const c of cats) {
     await run(
-      'INSERT OR IGNORE INTO categories (id,name,icon,slug) VALUES (?,?,?,?)',
+      'INSERT INTO categories (id,name,icon,slug) VALUES (?,?,?,?) ON CONFLICT DO NOTHING',
       [uuidv4(), c.name, c.icon, c.slug]
     );
   }
   console.log(`🌱  Seeded ${cats.length} categories`);
 }
 
-// ---------------------------------------------------------------------------
-// Init
-// ---------------------------------------------------------------------------
 async function initDB() {
-  const dbPath = path.resolve(__dirname, '../../tamamdir.db');
-  db = new DatabaseSync(dbPath);
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
   for (const stmt of SCHEMA_STATEMENTS) {
-    db.exec(stmt);
+    await pool.query(stmt);
   }
 
   await seed();
-  console.log(`📦  SQLite connected: ${dbPath}`);
+  console.log(`📦  PostgreSQL connected: ${process.env.DATABASE_URL}`);
 }
 
 module.exports = { initDB, run, get, all };

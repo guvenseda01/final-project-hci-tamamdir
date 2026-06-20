@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./tamamdir-backend
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      JWT_SECRET: ${JWT_SECRET:-tamamdir-local-dev-secret-change-before-deploy}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      RESEND_API_KEY: ${RESEND_API_KEY:-re_test_key_for_development}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@tamamdir.local}
+    volumes:
+      - ./tamamdir-backend/src:/app/src
+      - ./tamamdir-backend/uploads:/app/uploads
+    command: npm run dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Uncomment when frontend is ready to integrate
+  # frontend:
+  #   build:
+  #     context: ./tamamdir-web-app
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "5173:5173"
+  #   environment:
+  #     VITE_API_URL: http://localhost:4000
+  #   command: npm run dev
+  #   depends_on:
+  #     - backend

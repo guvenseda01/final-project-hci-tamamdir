@@ -1,8 +1,8 @@
-import { defineConfig } from 'vite'
+import { createServer as createViteServer } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
-export default defineConfig({
+console.log('[1] Creating server with proxy...');
+const vite = await createViteServer({
   plugins: [react()],
   server: {
     proxy: {
@@ -12,4 +12,6 @@ export default defineConfig({
       },
     },
   },
-})
+});
+console.log('[2] Success!');
+process.exit(0);

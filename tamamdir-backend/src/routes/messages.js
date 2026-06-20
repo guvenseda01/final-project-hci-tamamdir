@@ -1,12 +1,153 @@
 /**
- * /api/messages
- *
- * GET    /conversations              – list my conversations
- * POST   /conversations              – start or get conversation with a user
- * GET    /conversations/:id          – get messages in conversation
- * POST   /conversations/:id          – send a message
- * PATCH  /conversations/:id/read     – mark all messages as read
+ * @swagger
+ * tags:
+ *   - name: Messages
+ *     description: Messaging and conversations
  */
+
+/**
+ * @swagger
+ * /api/messages/conversations:
+ *   get:
+ *     tags: [Messages]
+ *     summary: List my conversations
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of conversations
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   other_name:
+ *                     type: string
+ *                   other_avatar:
+ *                     type: string
+ *                   last_message:
+ *                     type: string
+ *                   unread_count:
+ *                     type: integer
+ *       401:
+ *         description: Unauthorized
+ *   post:
+ *     tags: [Messages]
+ *     summary: Start or get conversation
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [user_id]
+ *             properties:
+ *               user_id:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Conversation created or retrieved
+ *       401:
+ *         description: Unauthorized
+ */
+
+/**
+ * @swagger
+ * /api/messages/conversations/{id}:
+ *   get:
+ *     tags: [Messages]
+ *     summary: Get conversation messages
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of messages
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   sender_id:
+ *                     type: string
+ *                   content:
+ *                     type: string
+ *                   is_read:
+ *                     type: boolean
+ *                   created_at:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Conversation not found
+ *   post:
+ *     tags: [Messages]
+ *     summary: Send message
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [content]
+ *             properties:
+ *               content:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Message sent
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Conversation not found
+ */
+
+/**
+ * @swagger
+ * /api/messages/conversations/{id}/read:
+ *   patch:
+ *     tags: [Messages]
+ *     summary: Mark conversation as read
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Marked as read
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Conversation not found
+ */
+
 const router = require('express').Router();
 const { body, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
@@ -143,7 +284,7 @@ router.post(
 
       // Update conversation last message
       await run(
-        `UPDATE conversations SET last_message = ?, last_msg_at = datetime('now') WHERE id = ?`,
+        `UPDATE conversations SET last_message = ?, last_msg_at = NOW() WHERE id = ?`,
         [req.body.content.slice(0, 100), req.params.id]
       );
 
