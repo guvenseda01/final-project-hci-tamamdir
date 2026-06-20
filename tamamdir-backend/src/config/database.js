@@ -186,6 +186,12 @@ async function initDB() {
   await pool.query(
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified_student INTEGER DEFAULT 0'
   );
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active INTEGER DEFAULT 1'
+  );
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ'
+  );
   await pool.query(`
     UPDATE users SET is_verified_student = 1
     WHERE is_verified_student = 0
