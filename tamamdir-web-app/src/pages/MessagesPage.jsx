@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { CheckCircle2, Send, Image, Plus, MoreVertical, Loader2 } from 'lucide-react'
-import { cn } from '../lib/utils'
+import { useSearchParams, Link } from 'react-router-dom'
+import { Send, Image, Plus, MoreVertical, Loader2, CheckCircle2, Ban } from 'lucide-react'
+import { cn, formatPrice } from '../lib/utils'
 import Navbar from '../components/Navbar'
+import TamamdirLogo from '../components/TamamdirLogo'
 import api from '../lib/api'
+import { getSocket, joinConversation, leaveConversation, disconnectSocket } from '../lib/socket'
 import { useAuth } from '../context/AuthContext'
 
 function formatMsgTime(dateStr) {
@@ -11,6 +13,67 @@ function formatMsgTime(dateStr) {
   return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
+function formatBanUntil(dateStr) {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function mergeTamamdirStatus(prev, payload, userId, otherId) {
+  const ids = payload.confirmed_user_ids ?? []
+  return {
+    service_id: payload.service_id ?? prev?.service_id,
+    service_title: payload.service_title ?? prev?.service_title,
+    my_confirmed: payload.my_confirmed ?? ids.includes(userId),
+    other_confirmed: payload.other_confirmed ?? (otherId ? ids.includes(otherId) : ids.length >= 2),
+    both_confirmed: payload.both_confirmed ?? false,
+    order_id: payload.both_confirmed ? (payload.order_id ?? null) : null,
+    order_status: payload.both_confirmed ? (payload.order_status ?? null) : null,
+    cancel_count: payload.cancel_count ?? prev?.cancel_count ?? 0,
+    customer_cancel_count: payload.customer_cancel_count ?? prev?.customer_cancel_count ?? 0,
+    provider_cancel_count: payload.provider_cancel_count ?? prev?.provider_cancel_count ?? 0,
+    cancel_limit: payload.cancel_limit ?? 2,
+    is_customer: payload.is_customer ?? prev?.is_customer,
+    my_cancel_count: payload.my_cancel_count ?? prev?.my_cancel_count ?? 0,
+    my_cancels_remaining: payload.my_cancels_remaining ?? prev?.my_cancels_remaining,
+    will_be_banned_if_cancel: payload.will_be_banned_if_cancel ?? false,
+    is_banned: payload.is_banned ?? false,
+    banned_until: payload.banned_until ?? null,
+    banned_user_id: payload.banned_user_id ?? null,
+    i_am_banned: payload.i_am_banned ?? false,
+    can_unban: payload.can_unban ?? false,
+    buyer_id: payload.buyer_id ?? prev?.buyer_id,
+    provider_id: payload.provider_id ?? prev?.provider_id,
+  }
+}
+
+function getCancelModalCopy(tamamdirStatus) {
+  if (!tamamdirStatus?.is_customer) {
+    return {
+      body: 'Are you sure you want to cancel this service arrangement?',
+      note: 'Providers are not banned for cancelling. The customer may leave a review reflecting their experience.',
+    }
+  }
+
+  const used = tamamdirStatus.customer_cancel_count ?? 0
+  const limit = tamamdirStatus.cancel_limit ?? 2
+
+  if (tamamdirStatus.will_be_banned_if_cancel) {
+    return {
+      body: 'Are you sure you want to cancel this service arrangement?',
+      note: `Customers can cancel up to ${limit} times (${used}/${limit} used). This is your final cancellation — you will be banned from this service for 1 week.`,
+    }
+  }
+
+  const leftAfter = Math.max(0, (tamamdirStatus.my_cancels_remaining ?? limit - used) - 1)
+  return {
+    body: 'Are you sure you want to cancel this service arrangement?',
+    note: `Customers can cancel up to ${limit} times (${used}/${limit} used). After this cancellation you will have ${leftAfter} cancellation(s) left before a 1-week ban.`,
+  }
+}
 function formatConvTime(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
@@ -26,74 +89,246 @@ function formatConvTime(dateStr) {
 
 export default function MessagesPage() {
   const { user } = useAuth()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const requestedConvId = searchParams.get('conv')
+  const requestedServiceId = searchParams.get('service')
 
   const [convs, setConvs] = useState([])
   const [activeConv, setActiveConv] = useState(null)
+  const [activeServiceId, setActiveServiceId] = useState(null)
+  const [activeService, setActiveService] = useState(null)
   const [messages, setMessages] = useState([])
   const [message, setMessage] = useState('')
-  const [pendingOrder, setPendingOrder] = useState(null)
-  const [tamamdirDone, setTamamdirDone] = useState(false)
+  const [tamamdirStatus, setTamamdirStatus] = useState(null)
   const [loadingConvs, setLoadingConvs] = useState(true)
   const [loadingMsgs, setLoadingMsgs] = useState(false)
   const [sending, setSending] = useState(false)
-  const [accepting, setAccepting] = useState(false)
+  const [tamamdirSubmitting, setTamamdirSubmitting] = useState(false)
+  const [cancelSubmitting, setCancelSubmitting] = useState(false)
+  const [unbanSubmitting, setUnbanSubmitting] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const messagesEndRef = useRef(null)
+  const activeConvIdRef = useRef(null)
+  const prevConvIdRef = useRef(null)
+  const activeServiceIdRef = useRef(null)
+  const activeConvRef = useRef(null)
+
+  activeConvIdRef.current = activeConv?.id ?? null
+  activeServiceIdRef.current = activeServiceId
+  activeConvRef.current = activeConv
 
   // Auto-scroll when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const selectConv = useCallback(async (conv) => {
-    setActiveConv(conv)
-    setMessages([])
-    setTamamdirDone(false)
-    setPendingOrder(null)
-    setLoadingMsgs(true)
-
+  const fetchTamamdirStatus = useCallback(async (convId, serviceId) => {
+    if (!convId || !serviceId) {
+      setTamamdirStatus(null)
+      return
+    }
     try {
-      const [msgs, orders] = await Promise.all([
-        api.get(`/api/messages/conversations/${conv.id}`),
-        api.get('/api/orders?role=provider&status=pending').catch(() => []),
-      ])
-      setMessages(msgs)
-      const match = Array.isArray(orders)
-        ? orders.find(o => o.buyer_id === conv.other_id)
-        : null
-      setPendingOrder(match ?? null)
+      const status = await api.get(
+        `/api/messages/conversations/${convId}/tamamdir?service_id=${serviceId}`
+      )
+      setTamamdirStatus(status)
     } catch {
-      // non-fatal: conversation stays open with empty messages
-    } finally {
-      setLoadingMsgs(false)
+      setTamamdirStatus(null)
     }
   }, [])
 
-  // Fetch conversation list on mount; honour ?conv= param from ServiceDetailPage
+  const persistServiceContext = useCallback(async (convId, serviceId) => {
+    if (!convId || !serviceId) return
+    try {
+      const updated = await api.patch(`/api/messages/conversations/${convId}`, { service_id: serviceId })
+      setConvs(prev => prev.map(c => (c.id === convId ? { ...c, service_id: updated.service_id } : c)))
+      setActiveConv(prev => (prev?.id === convId ? { ...prev, service_id: updated.service_id } : prev))
+    } catch {
+      // non-fatal
+    }
+  }, [])
+
+  const selectConv = useCallback(async (conv, serviceIdOverride) => {
+    const urlServiceId =
+      serviceIdOverride ??
+      conv.service_id ??
+      (conv.id === requestedConvId ? requestedServiceId : null)
+
+    setActiveConv(conv)
+    setMessages([])
+    setTamamdirStatus(null)
+    setShowCancelConfirm(false)
+    setActiveService(null)
+    if (urlServiceId) setActiveServiceId(urlServiceId)
+    else setActiveServiceId(null)
+    setLoadingMsgs(true)
+
+    try {
+      const [msgs, providerOrders, buyerOrders] = await Promise.all([
+        api.get(`/api/messages/conversations/${conv.id}`),
+        api.get('/api/orders?role=provider&status=pending').catch(() => []),
+        api.get('/api/orders?role=buyer&status=pending').catch(() => []),
+      ])
+      setMessages(msgs)
+
+      const relatedOrders = [...(providerOrders ?? []), ...(buyerOrders ?? [])].filter(
+        o => o.buyer_id === conv.other_id || o.provider_id === conv.other_id
+      )
+      const orderForService = urlServiceId
+        ? relatedOrders.find(o => o.service_id === urlServiceId)
+        : null
+      const serviceId =
+        serviceIdOverride ??
+        orderForService?.service_id ??
+        relatedOrders[0]?.service_id ??
+        conv.service_id ??
+        (conv.id === requestedConvId ? requestedServiceId : null) ??
+        null
+      setActiveServiceId(serviceId)
+      if (serviceId) {
+        if (serviceId !== conv.service_id) persistServiceContext(conv.id, serviceId)
+        await fetchTamamdirStatus(conv.id, serviceId)
+      }
+    } catch {
+      if (urlServiceId) setActiveServiceId(urlServiceId)
+    } finally {
+      setLoadingMsgs(false)
+    }
+  }, [fetchTamamdirStatus, persistServiceContext, requestedConvId, requestedServiceId])
+
+  const handleSelectConv = (conv) => {
+    const serviceId = requestedServiceId ?? conv.service_id ?? null
+    if (serviceId) {
+      setSearchParams({ conv: conv.id, service: serviceId })
+      selectConv(conv, serviceId)
+      return
+    }
+    setSearchParams({})
+    selectConv(conv)
+  }
+
+  useEffect(() => {
+    if (!activeServiceId) {
+      setActiveService(null)
+      return
+    }
+    let cancelled = false
+    api.get(`/api/services/${activeServiceId}`)
+      .then(data => { if (!cancelled) setActiveService(data) })
+      .catch(() => { if (!cancelled) setActiveService(null) })
+    return () => { cancelled = true }
+  }, [activeServiceId])
+
+  // Fetch conversation list on mount; honour ?conv= & ?service= from ServiceDetailPage
   useEffect(() => {
     setLoadingConvs(true)
     api.get('/api/messages/conversations')
       .then(data => {
         setConvs(data)
         if (data.length === 0) return
-        const target = requestedConvId
-          ? data.find(c => c.id === requestedConvId) ?? data[0]
-          : data[0]
-        selectConv(target)
+
+        if (requestedConvId) {
+          const target = data.find(c => c.id === requestedConvId) ?? data[0]
+          selectConv(target, requestedServiceId)
+          return
+        }
+
+        // ?service= only — provider opened from own service; user picks conversation
+        if (requestedServiceId) {
+          setActiveServiceId(requestedServiceId)
+          return
+        }
+
+        selectConv(data[0])
       })
       .catch(() => {})
       .finally(() => setLoadingConvs(false))
-  }, [selectConv, requestedConvId])
+  }, [selectConv, requestedConvId, requestedServiceId])
+
+  // Real-time: join active conversation room
+  useEffect(() => {
+    if (!activeConv?.id) return
+    if (prevConvIdRef.current && prevConvIdRef.current !== activeConv.id) {
+      leaveConversation(prevConvIdRef.current)
+    }
+    joinConversation(activeConv.id)
+    prevConvIdRef.current = activeConv.id
+    setConvs(prev => prev.map(c =>
+      c.id === activeConv.id ? { ...c, unread_count: 0 } : c
+    ))
+  }, [activeConv?.id])
+
+  // Real-time: socket listeners
+  useEffect(() => {
+    if (!user) return
+    const socket = getSocket()
+    if (!socket) return
+
+    const onNewMessage = (msg) => {
+      if (msg.conversation_id === activeConvIdRef.current) {
+        setMessages(prev => (prev.some(m => m.id === msg.id) ? prev : [...prev, msg]))
+      }
+      setConvs(prev => prev.map(c =>
+        c.id === msg.conversation_id
+          ? {
+              ...c,
+              last_message: msg.content,
+              last_msg_at: msg.created_at,
+              unread_count: msg.conversation_id === activeConvIdRef.current ? 0 : c.unread_count,
+            }
+          : c
+      ))
+    }
+
+    const onConvUpdated = ({ id, last_message, last_msg_at }) => {
+      const isActive = id === activeConvIdRef.current
+      setConvs(prev => {
+        const next = prev.map(c =>
+          c.id === id
+            ? {
+                ...c,
+                last_message,
+                last_msg_at,
+                unread_count: isActive ? 0 : (c.unread_count ?? 0) + 1,
+              }
+            : c
+        )
+        return [...next].sort(
+          (a, b) => new Date(b.last_msg_at ?? 0) - new Date(a.last_msg_at ?? 0)
+        )
+      })
+    }
+
+    const onTamamdirUpdate = (payload) => {
+      if (payload.conversation_id !== activeConvIdRef.current) return
+      if (payload.service_id && payload.service_id !== activeServiceIdRef.current) return
+
+      setTamamdirStatus(prev =>
+        mergeTamamdirStatus(prev, payload, user?.id, activeConvRef.current?.other_id)
+      )
+      if (!payload.both_confirmed) setShowCancelConfirm(false)
+    }
+
+    socket.on('message:new', onNewMessage)
+    socket.on('conversation:updated', onConvUpdated)
+    socket.on('tamamdir:update', onTamamdirUpdate)
+
+    return () => {
+      socket.off('message:new', onNewMessage)
+      socket.off('conversation:updated', onConvUpdated)
+      socket.off('tamamdir:update', onTamamdirUpdate)
+      if (prevConvIdRef.current) leaveConversation(prevConvIdRef.current)
+    }
+  }, [user?.id])
 
   const handleSend = async () => {
-    if (!message.trim() || !activeConv || sending) return
+    if (!message.trim() || !activeConv || sending || tamamdirStatus?.i_am_banned) return
     const text = message.trim()
     setMessage('')
     setSending(true)
     try {
       const msg = await api.post(`/api/messages/conversations/${activeConv.id}`, { content: text })
-      setMessages(prev => [...prev, msg])
+      setMessages(prev => (prev.some(m => m.id === msg.id) ? prev : [...prev, msg]))
       setConvs(prev => prev.map(c =>
         c.id === activeConv.id ? { ...c, last_message: text, last_msg_at: msg.created_at } : c
       ))
@@ -105,17 +340,117 @@ export default function MessagesPage() {
   }
 
   const handleTamamdir = async () => {
-    if (!pendingOrder || accepting) return
-    setAccepting(true)
+    if (!activeConv || !activeServiceId || tamamdirSubmitting) return
+    if (tamamdirStatus?.my_confirmed || tamamdirStatus?.both_confirmed) return
+
+    setTamamdirSubmitting(true)
     try {
-      await api.patch(`/api/orders/${pendingOrder.id}/accept`)
-      setTamamdirDone(true)
-      setPendingOrder(null)
-    } catch {
-      // keep button visible so user can retry
+      const status = await api.post(
+        `/api/messages/conversations/${activeConv.id}/tamamdir`,
+        { service_id: activeServiceId }
+      )
+      setTamamdirStatus(prev => mergeTamamdirStatus(prev, status, user?.id, activeConv?.other_id))
+    } catch (err) {
+      if (err.status === 403 && err.data) {
+        setTamamdirStatus(prev => mergeTamamdirStatus(prev, err.data, user?.id, activeConv?.other_id))
+      }
     } finally {
-      setAccepting(false)
+      setTamamdirSubmitting(false)
     }
+  }
+
+  const handleConfirmCancel = async () => {
+    if (!activeConv || !activeServiceId || cancelSubmitting) return
+
+    setCancelSubmitting(true)
+    try {
+      const status = await api.post(
+        `/api/messages/conversations/${activeConv.id}/tamamdir/cancel`,
+        { service_id: activeServiceId }
+      )
+      setTamamdirStatus(prev => mergeTamamdirStatus(prev, status, user?.id, activeConv?.other_id))
+      setShowCancelConfirm(false)
+    } catch {
+      // keep modal open so user can retry
+    } finally {
+      setCancelSubmitting(false)
+    }
+  }
+
+  const handleUnban = async () => {
+    if (!activeConv || !activeServiceId || unbanSubmitting) return
+
+    setUnbanSubmitting(true)
+    try {
+      const status = await api.post(
+        `/api/messages/conversations/${activeConv.id}/tamamdir/unban`,
+        { service_id: activeServiceId }
+      )
+      setTamamdirStatus(prev => mergeTamamdirStatus(prev, status, user?.id, activeConv?.other_id))
+    } catch {
+      // non-fatal
+    } finally {
+      setUnbanSubmitting(false)
+    }
+  }
+
+  const cancelModalCopy = getCancelModalCopy(tamamdirStatus)
+
+  const serviceCover = activeService?.images?.find(i => i.is_cover)?.image_url
+    ?? activeService?.images?.[0]?.image_url
+    ?? null
+  const isServiceProvider = activeService?.provider_id === user?.id
+
+  const renderTamamdirAction = () => {
+    if (!activeServiceId) return null
+
+    if (tamamdirStatus?.is_banned && tamamdirStatus?.can_unban) {
+      return (
+        <button
+          onClick={handleUnban}
+          disabled={unbanSubmitting}
+          className="text-sm font-semibold text-green-primary bg-white px-5 py-2.5 rounded-xl hover:bg-green-pale transition-colors disabled:opacity-60 shrink-0 shadow-md"
+        >
+          {unbanSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Remove ban'}
+        </button>
+      )
+    }
+
+    if (tamamdirStatus?.is_banned) return null
+
+    if (tamamdirStatus?.both_confirmed) {
+      return (
+        <button
+          onClick={() => setShowCancelConfirm(true)}
+          disabled={cancelSubmitting}
+          className="text-sm font-semibold text-white bg-white/15 hover:bg-white/25 border border-white/30 px-5 py-2.5 rounded-xl transition-colors disabled:opacity-60 shrink-0"
+        >
+          Cancel
+        </button>
+      )
+    }
+    if (tamamdirStatus?.my_confirmed) {
+      return (
+        <div className="flex items-center gap-2 bg-amber-50 text-amber-700 text-sm font-medium px-5 py-2.5 rounded-xl border border-amber-100 shrink-0">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          Waiting for {activeConv?.other_name}…
+        </div>
+      )
+    }
+    return (
+      <button
+        onClick={handleTamamdir}
+        disabled={tamamdirSubmitting}
+        title="Confirm this service"
+        className="flex items-center bg-white border-2 border-green-primary px-4 py-2 rounded-xl hover:bg-green-pale transition-all duration-200 hover:scale-105 active:scale-95 shadow-md disabled:opacity-60 disabled:pointer-events-none shrink-0"
+      >
+        {tamamdirSubmitting ? (
+          <Loader2 className="w-6 h-6 text-green-primary animate-spin" />
+        ) : (
+          <TamamdirLogo className="h-9" />
+        )}
+      </button>
+    )
   }
 
   if (loadingConvs) {
@@ -161,7 +496,7 @@ export default function MessagesPage() {
             {convs.map(conv => (
               <button
                 key={conv.id}
-                onClick={() => selectConv(conv)}
+                onClick={() => handleSelectConv(conv)}
                 className={cn(
                   'w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-gray-50 transition-colors border-b border-gray-50',
                   activeConv?.id === conv.id && 'bg-green-pale border-l-2 border-l-green-primary'
@@ -201,6 +536,45 @@ export default function MessagesPage() {
         {activeConv ? (
           <div className="flex-1 flex flex-col min-w-0">
 
+            {/* Service context bar — only when opened with a linked service */}
+            {activeServiceId && (
+              <div className="flex items-center justify-between gap-4 px-6 py-3 bg-green-primary border-b border-green-dark">
+                <Link
+                  to={`/services/${activeServiceId}`}
+                  className="flex items-center gap-3 min-w-0 hover:opacity-90 transition-opacity"
+                >
+                  {serviceCover ? (
+                    <img
+                      src={serviceCover}
+                      alt=""
+                      className="w-10 h-10 rounded-lg object-cover shrink-0 border-2 border-white/30 shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
+                      <span className="text-white text-xs font-bold">S</span>
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-medium text-green-light uppercase tracking-wide">
+                      {isServiceProvider ? 'Service offered' : 'Requested service'}
+                    </p>
+                    <p className="text-sm font-semibold text-white truncate">
+                      {activeService?.title ?? tamamdirStatus?.service_title ?? activeConv?.service_title ?? 'Loading…'}
+                    </p>
+                    {(activeService?.price != null || activeConv?.service_price != null) && (
+                      <p className="text-xs text-white/75">
+                        {formatPrice(
+                          activeService?.price ?? activeConv?.service_price,
+                          activeService?.price_unit ?? activeConv?.service_price_unit
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </Link>
+                {renderTamamdirAction()}
+              </div>
+            )}
+
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
               <div className="flex items-center gap-3">
@@ -217,37 +591,12 @@ export default function MessagesPage() {
                 </div>
                 <div>
                   <p className="font-semibold text-gray-900 text-sm">{activeConv.other_name}</p>
-                  {pendingOrder && (
-                    <p className="text-xs text-green-primary font-medium">
-                      Pending: <span className="font-semibold">{pendingOrder.service_title}</span>
-                    </p>
-                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                {tamamdirDone ? (
-                  <div className="flex items-center gap-2 bg-green-pale text-green-primary text-sm font-semibold px-4 py-2 rounded-lg">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Order Accepted!
-                  </div>
-                ) : pendingOrder && (
-                  <button
-                    onClick={handleTamamdir}
-                    disabled={accepting}
-                    className="flex items-center gap-2 bg-green-primary text-white text-sm font-semibold px-4 py-2.5 rounded-lg hover:bg-green-dark transition-all duration-200 hover:scale-105 active:scale-95 shadow-md disabled:opacity-60 disabled:pointer-events-none"
-                  >
-                    {accepting
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : <CheckCircle2 className="w-4 h-4" />
-                    }
-                    Tamamdır! Accept Order
-                  </button>
-                )}
-                <button className="p-2 rounded-lg hover:bg-gray-100">
-                  <MoreVertical className="w-5 h-5 text-gray-400" />
-                </button>
-              </div>
+              <button className="p-2 rounded-lg hover:bg-gray-100">
+                <MoreVertical className="w-5 h-5 text-gray-400" />
+              </button>
             </div>
 
             {/* Messages */}
@@ -309,41 +658,89 @@ export default function MessagesPage() {
                     )
                   })}
 
-                  {tamamdirDone && (
-                    <div className="flex justify-center">
-                      <div className="bg-green-pale text-green-primary text-sm font-semibold px-6 py-3 rounded-xl border border-green-light flex items-center gap-2">
-                        <CheckCircle2 className="w-5 h-5" />
-                        Order accepted — Tamamdır! 🎉
-                      </div>
-                    </div>
-                  )}
                   <div ref={messagesEndRef} />
                 </>
               )}
             </div>
 
+            {/* Status banner — above input */}
+            {tamamdirStatus?.i_am_banned && (
+              <div className="px-6 py-3 bg-red-50 border-t border-red-100 flex items-center justify-center gap-2">
+                <Ban className="w-4 h-4 text-red-500 shrink-0" />
+                <p className="text-sm font-semibold text-red-600 text-center">
+                  You were banned from this service until {formatBanUntil(tamamdirStatus.banned_until)}
+                </p>
+              </div>
+            )}
+            {tamamdirStatus?.is_banned && !tamamdirStatus?.i_am_banned && (
+              <div className="px-6 py-3 bg-amber-50 border-t border-amber-100 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Ban className="w-4 h-4 text-amber-600 shrink-0" />
+                  <p className="text-sm font-semibold text-amber-700">
+                    This customer is banned from this service until{' '}
+                    {formatBanUntil(tamamdirStatus.banned_until)}
+                  </p>
+                </div>
+                {tamamdirStatus.can_unban && (
+                  <button
+                    onClick={handleUnban}
+                    disabled={unbanSubmitting}
+                    className="text-xs font-semibold text-green-primary bg-white border border-green-primary px-3 py-1.5 rounded-lg hover:bg-green-pale shrink-0 disabled:opacity-60"
+                  >
+                    {unbanSubmitting ? 'Removing…' : 'Remove ban'}
+                  </button>
+                )}
+              </div>
+            )}
+            {tamamdirStatus?.both_confirmed && !tamamdirStatus?.is_banned && (
+              <div className="px-6 py-3 bg-green-pale border-t border-green-100 flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-green-primary shrink-0" />
+                <p className="text-sm font-semibold text-green-primary">
+                  Service arranged
+                </p>
+              </div>
+            )}
+
             {/* Input */}
             <div className="px-6 py-4 border-t border-gray-100 bg-white">
               <div className="flex items-center gap-3">
-                <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                <button
+                  disabled={tamamdirStatus?.i_am_banned}
+                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-40 disabled:pointer-events-none"
+                >
                   <Plus className="w-5 h-5" />
                 </button>
-                <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                <button
+                  disabled={tamamdirStatus?.i_am_banned}
+                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-40 disabled:pointer-events-none"
+                >
                   <Image className="w-5 h-5" />
                 </button>
-                <div className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5">
+                <div className={cn(
+                  'flex-1 border rounded-xl px-4 py-2.5',
+                  tamamdirStatus?.i_am_banned
+                    ? 'bg-gray-100 border-gray-200'
+                    : 'bg-gray-50 border-gray-200'
+                )}>
                   <input
                     type="text"
-                    placeholder="Type your message..."
+                    placeholder={
+                      tamamdirStatus?.i_am_banned
+                        ? 'You cannot send messages while banned'
+                        : 'Type your message...'
+                    }
                     value={message}
                     onChange={e => setMessage(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleSend() }}
-                    className="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none w-full"
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey && !tamamdirStatus?.i_am_banned) handleSend()
+                    }}
+                    disabled={tamamdirStatus?.i_am_banned}
+                    className="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none w-full disabled:cursor-not-allowed"
                   />
                 </div>
                 <button
                   onClick={handleSend}
-                  disabled={sending || !message.trim()}
+                  disabled={sending || !message.trim() || tamamdirStatus?.i_am_banned}
                   className="w-10 h-10 bg-green-primary rounded-xl flex items-center justify-center hover:bg-green-dark transition-colors disabled:opacity-50 disabled:pointer-events-none"
                 >
                   {sending
@@ -355,8 +752,55 @@ export default function MessagesPage() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center bg-gray-50/30">
-            <p className="text-gray-400 text-sm">Select a conversation to start messaging.</p>
+          <div className="flex-1 flex flex-col min-w-0">
+            {requestedServiceId && (
+              <div className="flex items-center justify-between gap-4 px-6 py-3 bg-green-primary border-b border-green-dark">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium text-green-light uppercase tracking-wide">
+                    Service context
+                  </p>
+                  <p className="text-sm font-semibold text-white truncate">
+                    {activeService?.title ?? 'Loading service…'}
+                  </p>
+                </div>
+              </div>
+            )}
+            <div className="flex-1 flex items-center justify-center bg-gray-50/30">
+              <p className="text-gray-400 text-sm">
+                {requestedServiceId
+                  ? 'Select the conversation about this service.'
+                  : 'Select a conversation to start messaging.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {showCancelConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Cancel arrangement?</h3>
+              <p className="text-sm text-gray-600 mb-3">{cancelModalCopy.body}</p>
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 mb-6">
+                {cancelModalCopy.note}
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowCancelConfirm(false)}
+                  disabled={cancelSubmitting}
+                  className="text-sm font-medium text-gray-500 hover:text-gray-700 px-4 py-2"
+                >
+                  No
+                </button>
+                <button
+                  onClick={handleConfirmCancel}
+                  disabled={cancelSubmitting}
+                  className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-60"
+                >
+                  {cancelSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Yes, cancel
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

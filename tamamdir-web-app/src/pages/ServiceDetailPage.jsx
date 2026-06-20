@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { Star, CheckCircle2, Clock, ArrowLeft, ChevronRight, AlertCircle, Loader2 } from 'lucide-react'
+import { Star, CheckCircle2, Clock, ArrowLeft, ChevronRight, AlertCircle, Loader2, MessageCircle } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import ServiceCard from '../components/ServiceCard'
 import api from '../lib/api'
 import { formatPrice, formatDelivery } from '../lib/utils'
+import { useAuth } from '../context/AuthContext'
 
 function DetailSkeleton() {
   return (
@@ -26,6 +27,7 @@ function DetailSkeleton() {
 export default function ServiceDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const [service, setService] = useState(null)
   const [reviews, setReviews] = useState([])
@@ -62,13 +64,52 @@ export default function ServiceDetailPage() {
   }, [id])
 
   const handleSendMessage = async () => {
+    if (!service) return
+    const serviceQuery = `service=${id}`
+
+    // Provider viewing own service — cannot message self; open messages with service context
+    if (user?.id === service.provider_id) {
+      try {
+        const [convs, orders] = await Promise.all([
+          api.get('/api/messages/conversations'),
+          api.get('/api/orders?role=provider&status=pending').catch(() => []),
+        ])
+        const serviceOrder = orders.find(o => o.service_id === id)
+        if (serviceOrder) {
+          const conv = await api.post('/api/messages/conversations', {
+            recipient_id: serviceOrder.buyer_id,
+            service_id: id,
+          })
+          navigate(`/messages?conv=${conv.id}&${serviceQuery}`)
+          return
+        }
+        if (convs.length === 1) {
+          const conv = await api.post('/api/messages/conversations', {
+            recipient_id: convs[0].other_id,
+            service_id: id,
+          })
+          navigate(`/messages?conv=${conv.id}&${serviceQuery}`)
+          return
+        }
+        navigate(`/messages?${serviceQuery}`)
+      } catch {
+        navigate(`/messages?${serviceQuery}`)
+      }
+      return
+    }
+
     try {
-      const conv = await api.post('/api/messages/conversations', { recipient_id: service.provider_id })
-      navigate(`/messages?conv=${conv.id}`)
+      const conv = await api.post('/api/messages/conversations', {
+        recipient_id: service.provider_id,
+        service_id: id,
+      })
+      navigate(`/messages?conv=${conv.id}&${serviceQuery}`)
     } catch {
-      navigate('/messages')
+      navigate(`/messages?${serviceQuery}`)
     }
   }
+
+  const isOwnService = user?.id === service?.provider_id
 
   const coverImage = service?.images?.find(i => i.is_cover)?.image_url
     ?? service?.images?.[0]?.image_url
@@ -236,8 +277,12 @@ export default function ServiceDetailPage() {
                 onClick={handleSendMessage}
                 className="btn-primary w-full justify-center py-3.5 text-base"
               >
-                <CheckCircle2 className="w-5 h-5" />
-                Send Message
+                {isOwnService ? (
+                  <MessageCircle className="w-5 h-5" />
+                ) : (
+                  <CheckCircle2 className="w-5 h-5" />
+                )}
+                {isOwnService ? 'View Messages' : 'Send Message'}
               </button>
               <p className="text-xs text-gray-400 text-center -mt-2">Request takes less than 1 minute</p>
 
