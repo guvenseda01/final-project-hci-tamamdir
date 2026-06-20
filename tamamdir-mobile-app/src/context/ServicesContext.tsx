@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Service } from "../data/types";
 import api from "../lib/api";
-import { SERVICES as MOCK_SERVICES } from "../data/mockData";
 
 interface ApiService {
   id: string;
@@ -71,9 +70,11 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     try {
       setError(null);
       const data = await api.get('/api/services?limit=50');
-      setServices((data.services as ApiService[]).map(mapService));
+      const arr: ApiService[] = Array.isArray(data) ? data : (data?.services ?? []);
+      setServices(arr.map(mapService));
     } catch {
-      setServices(MOCK_SERVICES);
+      setError("Hizmetler yüklenemedi.");
+      setServices([]);
     } finally {
       setLoading(false);
     }

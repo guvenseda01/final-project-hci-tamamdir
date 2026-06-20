@@ -1,13 +1,37 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import TopBar from "../components/TopBar";
 import BottomNav from "../components/BottomNav";
 import type { ServiceHistory } from "../data/types";
+import api from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
 type Tab = "requested" | "provided";
 
 export default function HistoryPage() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<Tab>("requested");
-  const history: ServiceHistory[] = [];
+  const [history, setHistory] = useState<ServiceHistory[]>([]);
+
+  useEffect(() => {
+    api.get('/api/orders')
+      .then((data: any) => {
+        const list = Array.isArray(data) ? data : [];
+        setHistory(list.map((o: any) => {
+          const isBuyer = o.buyer_id === user?.id;
+          return {
+            id: o.id,
+            serviceTitle: o.service_title ?? o.title ?? "Hizmet",
+            amount: `₺${o.amount ?? o.price ?? 0}`,
+            partnerName: isBuyer ? (o.provider_name ?? "") : (o.buyer_name ?? ""),
+            partnerAvatar: isBuyer ? (o.provider_avatar ?? "") : (o.buyer_avatar ?? ""),
+            status: (o.status === "completed" ? "completed" : o.status === "cancelled" ? "cancelled" : "pending") as ServiceHistory["status"],
+            date: o.created_at ? new Date(o.created_at).toLocaleDateString("tr-TR") : "",
+            type: (isBuyer ? "requested" : "provided") as ServiceHistory["type"],
+          };
+        }));
+      })
+      .catch(() => {});
+  }, [user?.id]);
 
   const filtered = history.filter((h) => h.type === tab);
   const totalCompleted = history.filter((h) => h.status === "completed").length;

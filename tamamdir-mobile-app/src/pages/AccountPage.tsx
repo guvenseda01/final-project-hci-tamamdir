@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
 import Toast from "../components/Toast";
+import api from "../lib/api";
 
 function isIyteEmail(email: string) {
   return email.endsWith("@std.iyte.edu.tr") || email.endsWith("@iyte.edu.tr");
@@ -15,15 +16,16 @@ export default function AccountPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
-  const DEFAULT_NOTIFS = [
+  type NotifSetting = { label: string; sub: string; on: boolean };
+  const DEFAULT_NOTIFS: NotifSetting[] = [
     { label: "Mesaj bildirimleri", sub: "Yeni mesaj geldiğinde bildir", on: true },
     { label: "Hizmet güncellemeleri", sub: "Rezervasyon değişikliklerinde bildir", on: true },
     { label: "Promosyonlar", sub: "Kampanya ve fırsatlardan haberdar ol", on: false },
   ];
-  const [notifSettings, setNotifSettings] = useState(() => {
+  const [notifSettings, setNotifSettings] = useState<NotifSetting[]>(() => {
     try {
       const saved = localStorage.getItem("notifSettings");
-      return saved ? JSON.parse(saved) : DEFAULT_NOTIFS;
+      return saved ? (JSON.parse(saved) as NotifSetting[]) : DEFAULT_NOTIFS;
     } catch {
       return DEFAULT_NOTIFS;
     }
@@ -50,8 +52,13 @@ export default function AccountPage() {
     setToastVisible(true);
   }
 
-  function save() {
+  async function save() {
     updateUser({ name: form.name, email: form.email });
+    try {
+      if (user?.id) {
+        await api.patch(`/api/users/${user.id}`, { full_name: form.name });
+      }
+    } catch {}
     showToast("Bilgiler kaydedildi!");
   }
 

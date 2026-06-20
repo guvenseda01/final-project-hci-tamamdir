@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { Conversation, Message } from "../data/types";
 import { useAuth } from "../context/AuthContext";
+import api from "../lib/api";
 
 interface ChatViewProps {
   conversation: Conversation;
@@ -14,10 +15,26 @@ export default function ChatView({ conversation, onBack }: ChatViewProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    api.get(`/api/messages/conversations/${conversation.id}`)
+      .then((data: any) => {
+        const list = Array.isArray(data) ? data : [];
+        setMessages(list.map((m: any) => ({
+          id: m.id,
+          text: m.content ?? "",
+          senderId: m.sender_id,
+          timestamp: m.created_at
+            ? new Date(m.created_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+            : "",
+        })));
+      })
+      .catch(() => {});
+  }, [conversation.id]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function sendMessage() {
+  async function sendMessage() {
     const text = input.trim();
     if (!text) return;
     const newMsg: Message = {
@@ -28,6 +45,9 @@ export default function ChatView({ conversation, onBack }: ChatViewProps) {
     };
     setMessages((prev) => [...prev, newMsg]);
     setInput("");
+    try {
+      await api.post(`/api/messages/conversations/${conversation.id}`, { content: text });
+    } catch {}
   }
 
   function handleKey(e: React.KeyboardEvent) {
