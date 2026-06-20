@@ -55,9 +55,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  function mergeLocalOverrides(mapped: User): User {
+    const savedAvatar = localStorage.getItem(`avatar_${mapped.id}`);
+    const savedFields = JSON.parse(localStorage.getItem(`userFields_${mapped.id}`) ?? '{}');
+    return { ...mapped, ...savedFields, ...(savedAvatar ? { avatar: savedAvatar } : {}) };
+  }
+
   const fetchMe = useCallback(async () => {
     const data: ApiUser = await api.get('/api/auth/me');
-    setUser(mapUser(data));
+    setUser(mergeLocalOverrides(mapUser(data)));
   }, []);
 
   useEffect(() => {
@@ -73,10 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function login(email: string, password: string) {
     const data = await api.post('/api/auth/login', { email, password });
     localStorage.setItem('token', data.token);
-    const mapped = mapUser(data.user);
-    const savedAvatar = localStorage.getItem('avatar');
-    const savedFields = JSON.parse(localStorage.getItem('userFields') ?? '{}');
-    setUser({ ...mapped, ...savedFields, ...(savedAvatar ? { avatar: savedAvatar } : {}) });
+    setUser(mergeLocalOverrides(mapUser(data.user)));
   }
 
   async function register(name: string, email: string, password: string) {
@@ -85,18 +88,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function logout() {
     localStorage.removeItem('token');
-    localStorage.removeItem('avatar');
-    localStorage.removeItem('userFields');
     setUser(null);
   }
 
   function updateAvatar(dataUrl: string) {
-    localStorage.setItem('avatar', dataUrl);
+    if (user?.id) localStorage.setItem(`avatar_${user.id}`, dataUrl);
     setUser((prev) => prev ? { ...prev, avatar: dataUrl } : prev);
   }
 
   function updateUser(fields: Partial<Pick<User, "name" | "email">>) {
-    localStorage.setItem('userFields', JSON.stringify(fields));
+    if (user?.id) {
+      const existing = JSON.parse(localStorage.getItem(`userFields_${user.id}`) ?? '{}');
+      localStorage.setItem(`userFields_${user.id}`, JSON.stringify({ ...existing, ...fields }));
+    }
     setUser((prev) => prev ? { ...prev, ...fields } : prev);
   }
 
