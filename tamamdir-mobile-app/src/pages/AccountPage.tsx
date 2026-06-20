@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import TopBar from "../components/TopBar";
 import { useAuth } from "../context/AuthContext";
@@ -10,7 +10,8 @@ function isIyteEmail(email: string) {
 
 export default function AccountPage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, updateAvatar } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
@@ -39,6 +40,18 @@ export default function AccountPage() {
 
   function save() {
     showToast("Bilgiler kaydedildi!");
+  }
+
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      updateAvatar(dataUrl);
+      showToast("Profil fotoğrafı güncellendi!");
+    };
+    reader.readAsDataURL(file);
   }
 
   function handleIyteVerify() {
@@ -77,9 +90,19 @@ export default function AccountPage() {
                 <span className="material-symbols-outlined text-on-secondary-container text-4xl">person</span>
               </div>
             )}
-            <button className="absolute bottom-0 right-0 w-8 h-8 bg-primary text-on-primary rounded-full flex items-center justify-center shadow-md">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute bottom-0 right-0 w-8 h-8 bg-primary text-on-primary rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform"
+            >
               <span className="material-symbols-outlined text-sm">photo_camera</span>
             </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
           </div>
           <p className="font-bold text-on-surface">{form.name}</p>
           <p className="text-xs text-on-surface-variant">{form.email}</p>

@@ -36,6 +36,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+  updateAvatar: (dataUrl: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -45,6 +46,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   register: async () => {},
   logout: () => {},
+  updateAvatar: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -69,7 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function login(email: string, password: string) {
     const data = await api.post('/api/auth/login', { email, password });
     localStorage.setItem('token', data.token);
-    setUser(mapUser(data.user));
+    const mapped = mapUser(data.user);
+    const savedAvatar = localStorage.getItem('avatar');
+    setUser(savedAvatar ? { ...mapped, avatar: savedAvatar } : mapped);
   }
 
   async function register(name: string, email: string, password: string) {
@@ -78,11 +82,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function logout() {
     localStorage.removeItem('token');
+    localStorage.removeItem('avatar');
     setUser(null);
   }
 
+  function updateAvatar(dataUrl: string) {
+    localStorage.setItem('avatar', dataUrl);
+    setUser((prev) => prev ? { ...prev, avatar: dataUrl } : prev);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn: !!user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoggedIn: !!user, loading, login, register, logout, updateAvatar }}>
       {children}
     </AuthContext.Provider>
   );
