@@ -8,9 +8,10 @@ function validateIyteEmail(email: string) {
 
 export default function SignupPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { register } = useAuth();
   const [form, setForm] = useState({ name: "", email: "", password: "", department: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [apiError, setApiError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -29,12 +30,21 @@ export default function SignupPage() {
     return errs;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setLoading(true);
-    setTimeout(() => { login(form.email); navigate("/"); }, 800);
+    setApiError(null);
+    try {
+      await register(form.name, form.email, form.password);
+      navigate("/");
+    } catch (err: unknown) {
+      const msg = (err as { message?: string }).message ?? "Kayıt başarısız.";
+      setApiError(msg === "Email already registered" ? "Bu e-posta zaten kayıtlı." : msg);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -56,6 +66,11 @@ export default function SignupPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-gutter">
+          {apiError && (
+            <div className="bg-error/10 border border-error/30 rounded-xl px-4 py-3 text-sm text-error">
+              {apiError}
+            </div>
+          )}
           {[
             { id: "name", label: "Ad Soyad", icon: "person", placeholder: "Adın Soyadın", type: "text" },
             { id: "email", label: "Öğrenci E-posta", icon: "mail", placeholder: "ogrenci@std.iyte.edu.tr", type: "email" },
