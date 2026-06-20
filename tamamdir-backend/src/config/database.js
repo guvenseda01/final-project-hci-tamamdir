@@ -1,5 +1,3 @@
-const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
 const { Pool } = require('pg');
 
 let pool;
@@ -10,14 +8,6 @@ function toPostgres(sql) {
   return sql.replace(/\?/g, () => `$${++i}`);
 }
 
-function run(sql, params = []) {
-  try {
-    const stmt   = db.prepare(sql);
-    const result = stmt.run(...params);
-    return Promise.resolve({ lastID: result.lastInsertRowid, changes: result.changes });
-  } catch (err) {
-    return Promise.reject(err);
-  }
 async function run(sql, params = []) {
   const result = await pool.query(toPostgres(sql), params);
   return { rowCount: result.rowCount };
