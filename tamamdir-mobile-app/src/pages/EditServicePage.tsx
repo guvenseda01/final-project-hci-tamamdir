@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate, useParams, Navigate } from "react-router-dom";
 import Toast from "../components/Toast";
-import { CURRENT_USER } from "../data/mockData";
 import { useServices } from "../context/ServicesContext";
+import { useAuth } from "../context/AuthContext";
 import type { Service } from "../data/types";
 
 type Status = "active" | "paused" | "draft";
@@ -11,6 +11,7 @@ export default function EditServicePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { services, updateService } = useServices();
+  const { user } = useAuth();
 
   const service = services.find((s) => s.id === id);
 
@@ -27,7 +28,7 @@ export default function EditServicePage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   if (!service) return <Navigate to="/services" replace />;
-  if (service.providerId !== CURRENT_USER.id) return <Navigate to={`/services/${id}`} replace />;
+  if (service.providerId !== user?.id) return <Navigate to={`/services/${id}`} replace />;
 
   function addTag() {
     const trimmed = tagInput.trim();
@@ -85,8 +86,12 @@ export default function EditServicePage() {
             İlanı Düzenle
           </h1>
         </div>
-        <div className="w-8 h-8 rounded-full bg-surface-container overflow-hidden">
-          <img src={CURRENT_USER.avatar} alt="Profil" className="w-full h-full object-cover" />
+        <div className="w-8 h-8 rounded-full bg-secondary-container overflow-hidden flex items-center justify-center">
+          {user?.avatar ? (
+            <img src={user.avatar} alt="Profil" className="w-full h-full object-cover" />
+          ) : (
+            <span className="material-symbols-outlined text-on-secondary-container text-xl">person</span>
+          )}
         </div>
       </header>
 

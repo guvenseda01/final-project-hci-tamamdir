@@ -2,8 +2,9 @@ import { useState } from "react";
 import TopBar from "../components/TopBar";
 import BottomNav from "../components/BottomNav";
 import ChatView from "./ChatView";
-import { CONVERSATIONS } from "../data/mockData";
 import type { Conversation } from "../data/types";
+
+const CONVERSATIONS: Conversation[] = [];
 
 export default function MessagesPage() {
   const [search, setSearch] = useState("");

@@ -1,21 +1,23 @@
 import { useState } from "react";
 import { useNavigate, useParams, Navigate } from "react-router-dom";
-import { CURRENT_USER, REVIEWS } from "../data/mockData";
 import { useServices } from "../context/ServicesContext";
+import { useAuth } from "../context/AuthContext";
+import type { Review } from "../data/types";
 
 export default function ServiceOwnerViewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { services } = useServices();
+  const { user } = useAuth();
 
   const service = services.find((s) => s.id === id);
-  const reviews = REVIEWS.filter((r) => r.id && r.serviceId === id);
+  const reviews: Review[] = [];
 
   const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
   const [submittedReplies, setSubmittedReplies] = useState<Record<string, string>>({});
 
   if (!service) return <Navigate to="/services" replace />;
-  if (service.providerId !== CURRENT_USER.id) return <Navigate to={`/services/${id}`} replace />;
+  if (service.providerId !== user?.id) return <Navigate to={`/services/${id}`} replace />;
 
   function submitReply(reviewId: string) {
     const text = replyInputs[reviewId]?.trim();

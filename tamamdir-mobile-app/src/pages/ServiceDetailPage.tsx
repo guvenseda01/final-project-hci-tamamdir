@@ -4,17 +4,19 @@ import BottomNav from "../components/BottomNav";
 import TamamdirButton from "../components/TamamdirButton";
 import Toast from "../components/Toast";
 import VerificationBadge from "../components/VerificationBadge";
-import { SERVICES, REVIEWS } from "../data/mockData";
+import { useServices } from "../context/ServicesContext";
+import type { Review } from "../data/types";
 
 export default function ServiceDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { services } = useServices();
   const [favorited, setFavorited] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
 
-  const service = SERVICES.find((s) => s.id === id) || SERVICES[0];
-  const reviews = REVIEWS.filter((r) => r.serviceId === service.id);
-  const moreServices = SERVICES.filter((s) => s.providerId === service.providerId && s.id !== service.id).slice(0, 3);
+  const service = services.find((s) => s.id === id) ?? services[0];
+  const reviews: Review[] = [];
+  const moreServices = services.filter((s) => s.providerId === service?.providerId && s.id !== service?.id).slice(0, 3);
 
   function handleTamamdir() {
     setToastVisible(true);

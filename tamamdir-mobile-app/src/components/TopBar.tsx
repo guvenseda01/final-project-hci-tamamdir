@@ -29,12 +29,12 @@ export default function TopBar({ showBack, title, rightContent }: TopBarProps) {
         </span>
       </div>
       {rightContent || (
-        <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden">
-          <img
-            src={user?.avatar || "https://i.pravatar.cc/150?img=3"}
-            alt="Profil"
-            className="w-full h-full object-cover"
-          />
+        <div className="w-8 h-8 rounded-full bg-secondary-container overflow-hidden flex items-center justify-center">
+          {user?.avatar ? (
+            <img src={user.avatar} alt="Profil" className="w-full h-full object-cover" />
+          ) : (
+            <span className="material-symbols-outlined text-on-secondary-container text-xl">person</span>
+          )}
         </div>
       )}
     </header>

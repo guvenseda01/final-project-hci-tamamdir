@@ -1,16 +1,17 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Toast from "../components/Toast";
-import { CATEGORIES, CURRENT_USER } from "../data/mockData";
 import { useServices } from "../context/ServicesContext";
+import { useAuth } from "../context/AuthContext";
 import type { Service } from "../data/types";
 
 const UNITS = ["Saatlik", "Proje bazlı", "Sayfa başı", "Kelime başı", "Oturum başı"];
-const SERVICE_CATEGORIES = CATEGORIES.filter((c) => c !== "Tümü");
+const SERVICE_CATEGORIES = ["Eğitim", "Tasarım", "Teknik", "El Sanatları", "Spor", "Teslimat", "Yaratıcı"];
 
 export default function AddNewServicePage() {
   const navigate = useNavigate();
   const { addService } = useServices();
+  const { user } = useAuth();
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
@@ -29,11 +30,11 @@ export default function AddNewServicePage() {
       price: `₺${price}/${unit === "Saatlik" ? "sa" : unit.split(" ")[0].toLowerCase()}`,
       priceNum: Number(price),
       category,
-      providerId: CURRENT_USER.id,
-      providerName: CURRENT_USER.name,
-      providerDepartment: `${CURRENT_USER.department}, ${CURRENT_USER.year}`,
-      providerAvatar: CURRENT_USER.avatar,
-      providerVerified: CURRENT_USER.verified,
+      providerId: user?.id ?? "",
+      providerName: user?.name ?? "",
+      providerDepartment: user?.department ?? "",
+      providerAvatar: user?.avatar ?? "",
+      providerVerified: user?.verified ?? false,
       rating: 0,
       reviewCount: 0,
       image: `https://picsum.photos/seed/${Date.now()}/600/400`,
@@ -69,8 +70,12 @@ export default function AddNewServicePage() {
             Yeni Hizmet Ekle
           </h1>
         </div>
-        <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/20">
-          <img src={CURRENT_USER.avatar} alt="Profil" className="w-full h-full object-cover" />
+        <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/20 bg-secondary-container flex items-center justify-center">
+          {user?.avatar ? (
+            <img src={user.avatar} alt="Profil" className="w-full h-full object-cover" />
+          ) : (
+            <span className="material-symbols-outlined text-on-secondary-container text-xl">person</span>
+          )}
         </div>
       </header>
 

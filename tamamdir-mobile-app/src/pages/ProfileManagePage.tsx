@@ -1,15 +1,14 @@
 import { useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
-import { CURRENT_USER } from "../data/mockData";
 import { useServices } from "../context/ServicesContext";
 import { useAuth } from "../context/AuthContext";
 
 export default function ProfileManagePage() {
   const navigate = useNavigate();
   const { services } = useServices();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
 
-  const myServices = services.filter((s) => s.providerId === CURRENT_USER.id);
+  const myServices = services.filter((s) => s.providerId === user?.id);
 
   function handleLogout() {
     logout();
