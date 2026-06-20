@@ -181,12 +181,14 @@ export default function OnboardingPage() {
           <span className="text-sm text-gray-400 mr-auto">
             {selected.size} interest{selected.size !== 1 ? 's' : ''} selected
           </span>
-          <button
-            onClick={handleCancel}
-            className="text-sm text-gray-500 font-medium hover:text-gray-700 px-4 py-2.5"
-          >
-            {isFromProfile ? 'Cancel' : 'Skip for Now'}
-          </button>
+          {!isFromProfile ? null : (
+            <button
+              onClick={handleCancel}
+              className="text-sm text-gray-500 font-medium hover:text-gray-700 px-4 py-2.5"
+            >
+              Cancel
+            </button>
+          )}
           <button
             onClick={handleSave}
             disabled={saving || loadingCats}
