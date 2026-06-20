@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { Conversation, Message } from "../data/types";
 import { useAuth } from "../context/AuthContext";
+import api from "../lib/api";
 
 interface ChatViewProps {
   conversation: Conversation;
@@ -9,25 +10,42 @@ interface ChatViewProps {
 
 export default function ChatView({ conversation, onBack }: ChatViewProps) {
   const { user } = useAuth();
-  const [messages, setMessages] = useState<Message[]>(conversation.messages);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api.get(`/api/messages/conversations/${conversation.id}`)
+      .then((data: any[]) => {
+        setMessages(data.map((m) => ({
+          id: m.id,
+          text: m.content,
+          senderId: m.sender_id,
+          timestamp: new Date(m.created_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+        })));
+      })
+      .catch(() => {});
+  }, [conversation.id]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function sendMessage() {
+  async function sendMessage() {
     const text = input.trim();
     if (!text) return;
-    const newMsg: Message = {
-      id: `m${Date.now()}`,
-      text,
-      senderId: user?.id ?? "",
-      timestamp: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
-    };
-    setMessages((prev) => [...prev, newMsg]);
     setInput("");
+    try {
+      const m = await api.post(`/api/messages/conversations/${conversation.id}`, { content: text });
+      setMessages((prev) => [...prev, {
+        id: m.id,
+        text: m.content,
+        senderId: m.sender_id,
+        timestamp: new Date(m.created_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+      }]);
+    } catch {
+      setInput(text);
+    }
   }
 
   function handleKey(e: React.KeyboardEvent) {

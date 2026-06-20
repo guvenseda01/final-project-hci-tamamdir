@@ -1,13 +1,50 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import TopBar from "../components/TopBar";
 import BottomNav from "../components/BottomNav";
 import type { ServiceHistory } from "../data/types";
+import api from "../lib/api";
 
 type Tab = "requested" | "provided";
 
+function mapStatus(s: string): ServiceHistory["status"] {
+  if (s === "completed") return "completed";
+  if (s === "cancelled") return "cancelled";
+  return "pending";
+}
+
 export default function HistoryPage() {
   const [tab, setTab] = useState<Tab>("requested");
-  const history: ServiceHistory[] = [];
+  const [history, setHistory] = useState<ServiceHistory[]>([]);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/api/orders?role=buyer'),
+      api.get('/api/orders?role=provider'),
+    ]).then(([bought, provided]: [any[], any[]]) => {
+      setHistory([
+        ...bought.map((o) => ({
+          id: o.id,
+          serviceTitle: o.service_title,
+          amount: `₺${o.price_at_order}`,
+          partnerName: o.provider_name,
+          partnerAvatar: o.provider_avatar ?? '',
+          status: mapStatus(o.status),
+          date: new Date(o.created_at).toLocaleDateString('tr-TR'),
+          type: 'requested' as const,
+        })),
+        ...provided.map((o) => ({
+          id: o.id,
+          serviceTitle: o.service_title,
+          amount: `₺${o.price_at_order}`,
+          partnerName: o.buyer_name,
+          partnerAvatar: o.buyer_avatar ?? '',
+          status: mapStatus(o.status),
+          date: new Date(o.created_at).toLocaleDateString('tr-TR'),
+          type: 'provided' as const,
+        })),
+      ]);
+    }).catch(() => {});
+  }, []);
 
   const filtered = history.filter((h) => h.type === tab);
   const totalCompleted = history.filter((h) => h.status === "completed").length;

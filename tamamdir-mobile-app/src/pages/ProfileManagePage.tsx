@@ -36,7 +36,7 @@ export default function ProfileManagePage() {
         </div>
         <div className="relative">
           <div className="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant/30">
-            <img src={CURRENT_USER.avatar} alt="Profil" className="w-full h-full object-cover" />
+            <img src={user?.avatar} alt="Profil" className="w-full h-full object-cover" />
           </div>
           <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-success-verified rounded-full border-2 border-surface-container-lowest flex items-center justify-center">
             <span className="material-symbols-outlined text-[10px] text-white fill-icon">check_circle</span>
@@ -49,10 +49,10 @@ export default function ProfileManagePage() {
         <section className="bg-inverse-surface pt-lg pb-xl px-margin-mobile relative overflow-hidden">
           <div className="relative z-10">
             <h2 className="font-bold text-[28px] leading-[36px] text-inverse-on-surface">
-              {CURRENT_USER.name}
+              {user?.name}
             </h2>
             <p className="text-on-surface-variant font-label-bold text-label-bold text-surface-variant/80">
-              {CURRENT_USER.department} • {CURRENT_USER.year}
+              {user?.department} • {user?.year}
             </p>
             <div className="mt-md flex gap-xs">
               <span className="px-sm py-base bg-emerald-brand/20 text-emerald-brand rounded-full text-micro font-micro border border-emerald-brand/30 uppercase">
@@ -66,14 +66,14 @@ export default function ProfileManagePage() {
         <section className="px-margin-mobile -mt-xl relative z-20">
           <div className="bg-surface-container-lowest rounded-xl shadow-card border border-outline-variant/10 p-md flex justify-between items-center text-center">
             <div className="flex-1">
-              <p className="text-[24px] font-bold text-primary">{CURRENT_USER.completedServices}</p>
+              <p className="text-[24px] font-bold text-primary">{user?.completedServices ?? 0}</p>
               <p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Done</p>
             </div>
             <div className="w-px h-8 bg-outline-variant/30" />
             <div className="flex-1">
               <div className="flex justify-center items-center gap-1">
                 <span className="material-symbols-outlined text-emerald-brand text-sm fill-icon">star</span>
-                <p className="text-[24px] font-bold text-primary">{CURRENT_USER.rating}</p>
+                <p className="text-[24px] font-bold text-primary">{user?.rating ?? 0}</p>
               </div>
               <p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Rating</p>
             </div>

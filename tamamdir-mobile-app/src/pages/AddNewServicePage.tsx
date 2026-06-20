@@ -1,52 +1,57 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Toast from "../components/Toast";
 import { useServices } from "../context/ServicesContext";
 import { useAuth } from "../context/AuthContext";
-import type { Service } from "../data/types";
+import api from "../lib/api";
 
-const UNITS = ["Saatlik", "Proje bazlı", "Sayfa başı", "Kelime başı", "Oturum başı"];
-const SERVICE_CATEGORIES = ["Eğitim", "Tasarım", "Teknik", "El Sanatları", "Spor", "Teslimat", "Yaratıcı"];
+const UNITS: { label: string; value: string }[] = [
+  { label: "Saatlik", value: "hour" },
+  { label: "Oturum başı", value: "session" },
+  { label: "Sayfa başı", value: "piece" },
+  { label: "Proje bazlı", value: "item" },
+  { label: "Günlük", value: "day" },
+];
 
 export default function AddNewServicePage() {
   const navigate = useNavigate();
-  const { addService } = useServices();
+  const { refresh } = useServices();
   const { user } = useAuth();
 
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [price, setPrice] = useState("");
-  const [unit, setUnit] = useState(UNITS[0]);
+  const [unit, setUnit] = useState(UNITS[0].value);
   const [description, setDescription] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-  function handlePublish() {
-    if (!title.trim() || !category || !price) return;
+  useEffect(() => {
+    api.get('/api/categories').then((data: any[]) => setCategories(data)).catch(() => {});
+  }, []);
 
-    const newService: Service = {
-      id: `s_new_${Date.now()}`,
-      title: title.trim(),
-      description: description.trim() || "Yeni hizmet açıklaması.",
-      price: `₺${price}/${unit === "Saatlik" ? "sa" : unit.split(" ")[0].toLowerCase()}`,
-      priceNum: Number(price),
-      category,
-      providerId: user?.id ?? "",
-      providerName: user?.name ?? "",
-      providerDepartment: user?.department ?? "",
-      providerAvatar: user?.avatar ?? "",
-      providerVerified: user?.verified ?? false,
-      rating: 0,
-      reviewCount: 0,
-      image: `https://picsum.photos/seed/${Date.now()}/600/400`,
-      tags: [category],
-      deliveryDays: 0,
-      location: "Kampüs veya Online",
-      status: "active",
-    };
-
-    addService(newService);
-    setToastVisible(true);
-    setTimeout(() => navigate(-1), 1800);
+  async function handlePublish() {
+    if (!title.trim() || !categoryId || !price) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await api.post('/api/services', {
+        title: title.trim(),
+        description: description.trim() || undefined,
+        category_id: categoryId,
+        price: Number(price),
+        price_unit: unit,
+      });
+      await refresh();
+      setToastVisible(true);
+      setTimeout(() => navigate(-1), 1800);
+    } catch (err: any) {
+      setError(err.message ?? "Hizmet eklenemedi.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -119,13 +124,13 @@ export default function AddNewServicePage() {
               <div className="relative">
                 <select
                   id="service-category"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
                   className="w-full h-14 px-md rounded-xl bg-surface-container-lowest border border-outline-variant/30 font-body-md text-body-md text-on-surface appearance-none focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
                 >
                   <option value="" disabled>Kategori seçin</option>
-                  {SERVICE_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
                 <span className="material-symbols-outlined absolute right-md top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">
@@ -161,7 +166,7 @@ export default function AddNewServicePage() {
                     className="w-full h-14 px-md rounded-xl bg-surface-container-lowest border border-outline-variant/30 font-body-md text-body-md text-on-surface appearance-none focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
                   >
                     {UNITS.map((u) => (
-                      <option key={u} value={u}>{u}</option>
+                      <option key={u.value} value={u.value}>{u.label}</option>
                     ))}
                   </select>
                   <span className="material-symbols-outlined absolute right-md top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">
@@ -193,6 +198,9 @@ export default function AddNewServicePage() {
                 Hizmetiniz yayınlandıktan sonra platformdaki tüm üniversite öğrencileri tarafından görülebilir olacaktır.
               </p>
             </div>
+            {error && (
+              <p className="text-sm text-error bg-error/10 rounded-xl px-md py-sm">{error}</p>
+            )}
           </div>
         </div>
       </main>
@@ -201,10 +209,10 @@ export default function AddNewServicePage() {
       <div className="fixed bottom-0 w-full bg-surface-container-lowest/90 backdrop-blur-md border-t border-outline-variant/20 p-margin-mobile z-50 max-w-md">
         <button
           onClick={handlePublish}
-          disabled={!title.trim() || !category || !price}
+          disabled={!title.trim() || !categoryId || !price || submitting}
           className="w-full h-14 bg-primary text-on-primary rounded-xl font-label-bold text-body-md flex items-center justify-center gap-sm shadow-lg active:scale-[0.97] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <span>Hizmeti Yayınla</span>
+          <span>{submitting ? "Yayınlanıyor..." : "Hizmeti Yayınla"}</span>
           <span className="material-symbols-outlined">rocket_launch</span>
         </button>
       </div>

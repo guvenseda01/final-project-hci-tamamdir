@@ -3,14 +3,14 @@ import { useNavigate, useParams, Navigate } from "react-router-dom";
 import Toast from "../components/Toast";
 import { useServices } from "../context/ServicesContext";
 import { useAuth } from "../context/AuthContext";
-import type { Service } from "../data/types";
+import api from "../lib/api";
 
 type Status = "active" | "paused" | "draft";
 
 export default function EditServicePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { services, updateService } = useServices();
+  const { services, refresh } = useServices();
   const { user } = useAuth();
 
   const service = services.find((s) => s.id === id);
@@ -26,6 +26,8 @@ export default function EditServicePage() {
   const [status, setStatus] = useState<Status>((service?.status ?? "active") as Status);
   const [toastVisible, setToastVisible] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [apiError, setApiError] = useState("");
 
   if (!service) return <Navigate to="/services" replace />;
   if (service.providerId !== user?.id) return <Navigate to={`/services/${id}`} replace />;
@@ -42,21 +44,35 @@ export default function EditServicePage() {
     setTags(tags.filter((t) => t !== tag));
   }
 
-  function handleSave() {
-    const deliveryDays = parseInt(delivery) || 0;
-    const updated: Service = {
-      ...service!,
-      title: title.trim() || service!.title,
-      priceNum: Number(price) || service!.priceNum,
-      price: `₺${price || service!.priceNum}`,
-      description: description.trim() || service!.description,
-      tags,
-      deliveryDays,
-      status,
-    };
-    updateService(updated);
-    setToastVisible(true);
-    setTimeout(() => navigate(`/services/${id}/manage`), 1800);
+  async function handleSave() {
+    setSubmitting(true);
+    setApiError("");
+    try {
+      await api.patch(`/api/services/${id}`, {
+        title: title.trim() || undefined,
+        description: description.trim() || undefined,
+        price: Number(price) || undefined,
+        delivery_days: parseInt(delivery) || undefined,
+        is_active: status === "active" ? 1 : 0,
+      });
+      await refresh();
+      setToastVisible(true);
+      setTimeout(() => navigate(`/services/${id}/manage`), 1800);
+    } catch (err: any) {
+      setApiError(err.message ?? "Kaydedilemedi.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete() {
+    try {
+      await api.del(`/api/services/${id}`);
+      await refresh();
+      navigate("/profile/manage");
+    } catch (err: any) {
+      setApiError(err.message ?? "Silinemedi.");
+    }
   }
 
   const statusOptions: { key: Status; label: string }[] = [
@@ -276,7 +292,7 @@ export default function EditServicePage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => navigate("/profile/manage")}
+                    onClick={handleDelete}
                     className="flex-1 py-sm rounded-xl bg-error text-white font-label-bold active:opacity-80 transition-opacity"
                   >
                     Sil
@@ -290,12 +306,16 @@ export default function EditServicePage() {
 
       {/* Fixed Bottom Action */}
       <div className="fixed bottom-0 w-full bg-surface-container-lowest/80 backdrop-blur-xl border-t border-outline-variant/10 px-margin-mobile pt-md pb-gutter z-50 max-w-md">
+        {apiError && (
+          <p className="text-sm text-error mb-sm">{apiError}</p>
+        )}
         <button
           onClick={handleSave}
-          className="w-full bg-emerald-brand text-white py-md rounded-2xl font-label-bold text-[16px] shadow-lg shadow-emerald-brand/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          disabled={submitting}
+          className="w-full bg-emerald-brand text-white py-md rounded-2xl font-label-bold text-[16px] shadow-lg shadow-emerald-brand/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
         >
           <span className="material-symbols-outlined">save</span>
-          Değişiklikleri Kaydet
+          {submitting ? "Kaydediliyor..." : "Değişiklikleri Kaydet"}
         </button>
       </div>
     </div>

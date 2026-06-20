@@ -48,7 +48,7 @@ export default function ServiceOwnerViewPage() {
           </h1>
         </div>
         <div className="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden border border-outline-variant/30">
-          <img src={CURRENT_USER.avatar} alt="Owner Profile" className="w-full h-full object-cover" />
+          <img src={user?.avatar} alt="Owner Profile" className="w-full h-full object-cover" />
         </div>
       </header>
 
@@ -186,7 +186,7 @@ export default function ServiceOwnerViewPage() {
                     {submittedReplies[review.id] ? (
                       <div className="bg-surface-container-low p-sm rounded-lg border-l-4 border-primary">
                         <p className="font-label-sm text-label-sm font-bold text-primary mb-1">
-                          {CURRENT_USER.name} (Sen)
+                          {user?.name} (Sen)
                         </p>
                         <p className="font-body-md text-body-md text-on-surface-variant">
                           {submittedReplies[review.id]}
@@ -197,8 +197,8 @@ export default function ServiceOwnerViewPage() {
                         <div className="flex items-center gap-2 mb-2">
                           <div className="w-6 h-6 rounded-full overflow-hidden bg-primary-fixed">
                             <img
-                              src={CURRENT_USER.avatar}
-                              alt={CURRENT_USER.name}
+                              src={user?.avatar}
+                              alt={user?.name}
                               className="w-full h-full object-cover"
                             />
                           </div>
