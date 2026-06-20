@@ -2,10 +2,6 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-function validateIyteEmail(email: string) {
-  return email.endsWith("@iyte.edu.tr") || email.endsWith("@std.iyte.edu.tr");
-}
-
 export default function SignupPage() {
   const navigate = useNavigate();
   const { register } = useAuth();
@@ -24,7 +20,7 @@ export default function SignupPage() {
     const errs: Record<string, string> = {};
     if (!form.name.trim()) errs.name = "Ad Soyad zorunludur.";
     if (!form.email) errs.email = "E-posta zorunludur.";
-    else if (!validateIyteEmail(form.email)) errs.email = "@iyte.edu.tr veya @std.iyte.edu.tr gerekli.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = "Geçerli bir e-posta girin.";
     if (!form.password || form.password.length < 6) errs.password = "Şifre en az 6 karakter.";
     if (!form.department) errs.department = "Bölüm zorunludur.";
     return errs;
@@ -73,7 +69,7 @@ export default function SignupPage() {
           )}
           {[
             { id: "name", label: "Ad Soyad", icon: "person", placeholder: "Adın Soyadın", type: "text" },
-            { id: "email", label: "Öğrenci E-posta", icon: "mail", placeholder: "ogrenci@std.iyte.edu.tr", type: "email" },
+            { id: "email", label: "E-posta", icon: "mail", placeholder: "ornek@mail.com", type: "email" },
           ].map(({ id, label, icon, placeholder, type }) => (
             <div key={id} className="flex flex-col gap-base">
               <label className="font-bold text-label-bold text-on-surface-variant px-1" htmlFor={id}>{label}</label>
@@ -133,7 +129,9 @@ export default function SignupPage() {
 
           <div className="bg-primary/5 rounded-xl p-3 flex items-start gap-2">
             <span className="material-symbols-outlined fill-icon text-primary text-sm mt-0.5">info</span>
-            <p className="text-xs text-on-surface-variant">Yalnızca İYTE öğrenci veya personel e-postası kabul edilir.</p>
+            <p className="text-xs text-on-surface-variant">
+              İYTE öğrenciyseniz <span className="font-bold">@std.iyte.edu.tr</span> e-postanızla kayıt olarak doğrulanmış öğrenci rozeti alabilirsiniz.
+            </p>
           </div>
 
           <button

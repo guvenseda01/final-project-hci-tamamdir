@@ -102,6 +102,44 @@ export default function AccountPage() {
           ))}
         </div>
 
+        {/* Student Verification */}
+        {user?.email?.endsWith("@std.iyte.edu.tr") ? (
+          <div className="bg-primary/5 rounded-2xl border border-primary/20 p-5">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                <span className="material-symbols-outlined fill-icon">verified</span>
+              </div>
+              <div>
+                <p className="font-bold text-sm text-on-surface">İYTE Öğrenci Doğrulaması</p>
+                <p className="text-[11px] text-secondary">Hesabınız doğrulanmış</p>
+              </div>
+              <span className="ml-auto text-xs bg-primary text-on-primary px-2.5 py-1 rounded-full font-bold">Aktif</span>
+            </div>
+            <p className="text-xs text-on-surface-variant">
+              <span className="font-bold">{user.email}</span> adresiyle giriş yaparak İYTE öğrenci rozeti aldınız. Diğer kullanıcılar profilinizde doğrulama işaretini görebilir.
+            </p>
+          </div>
+        ) : (
+          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-secondary-container flex items-center justify-center text-on-secondary-container">
+                <span className="material-symbols-outlined">school</span>
+              </div>
+              <div>
+                <p className="font-bold text-sm text-on-surface">İYTE Öğrenci Doğrulaması</p>
+                <p className="text-[11px] text-secondary">Doğrulanmamış hesap</p>
+              </div>
+            </div>
+            <p className="text-xs text-on-surface-variant mb-3">
+              İYTE öğrenciyseniz <span className="font-bold">@std.iyte.edu.tr</span> uzantılı e-posta adresinizle yeni bir hesap oluşturarak doğrulanmış öğrenci rozeti alabilirsiniz.
+            </p>
+            <div className="flex items-center gap-2 text-xs text-secondary bg-surface-container rounded-xl px-3 py-2">
+              <span className="material-symbols-outlined text-sm">info</span>
+              Doğrulama rozeti diğer kullanıcılara güven sinyali verir.
+            </div>
+          </div>
+        )}
+
         {/* Danger Zone */}
         <div className="bg-error-container/20 rounded-2xl border border-error/20 p-5 space-y-3">
           <h3 className="font-bold text-sm text-error uppercase tracking-widest">Tehlikeli Alan</h3>
