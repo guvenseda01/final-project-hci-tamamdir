@@ -135,7 +135,7 @@ async function main() {
     if (!svc) continue;
 
     const orderId = uuidv4();
-    const completedAt = `datetime('now', '-${daysAgo} days')`;
+    const completedAt = `NOW() - INTERVAL '${daysAgo} days'`;
     await run(
       `INSERT INTO orders (id, service_id, buyer_id, provider_id, status, price_at_order, completed_at, updated_at)
        VALUES (?, ?, ?, ?, 'completed', ?, ${completedAt}, ${completedAt})`,
@@ -182,7 +182,7 @@ async function main() {
       const convId = uuidv4();
       await run(
         `INSERT INTO conversations (id, participant_a, participant_b, last_message, last_msg_at)
-         VALUES (?, ?, ?, ?, datetime('now', '-30 minutes'))`,
+         VALUES (?, ?, ?, ?, NOW() - INTERVAL '30 minutes')`,
         [convId, pA, pB, 'Sure! Send me your code and we can schedule a session.']
       );
 

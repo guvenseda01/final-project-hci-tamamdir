@@ -1,10 +1,131 @@
 /**
- * /api/reviews
- *
- * POST /            – leave a review for a completed order (buyer only)
- * GET  /service/:id – all reviews for a service
- * GET  /user/:id    – all reviews for a provider
+ * @swagger
+ * tags:
+ *   - name: Reviews
+ *     description: Service reviews and ratings
  */
+
+/**
+ * @swagger
+ * /api/reviews:
+ *   post:
+ *     tags: [Reviews]
+ *     summary: Leave a review for a service
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [order_id, rating]
+ *             properties:
+ *               order_id:
+ *                 type: string
+ *               rating:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 5
+ *               comment:
+ *                 type: string
+ *                 maxLength: 1000
+ *     responses:
+ *       201:
+ *         description: Review created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 order_id:
+ *                   type: string
+ *                 rating:
+ *                   type: integer
+ *                 comment:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ *       409:
+ *         description: Review already exists for this order
+ */
+
+/**
+ * @swagger
+ * /api/reviews/service/{id}:
+ *   get:
+ *     tags: [Reviews]
+ *     summary: Get reviews for a service
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of reviews
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   rating:
+ *                     type: integer
+ *                   comment:
+ *                     type: string
+ *                   reviewer_name:
+ *                     type: string
+ *                   created_at:
+ *                     type: string
+ *       404:
+ *         description: Service not found
+ */
+
+/**
+ * @swagger
+ * /api/reviews/user/{id}:
+ *   get:
+ *     tags: [Reviews]
+ *     summary: Get reviews for a provider
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of reviews
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   rating:
+ *                     type: integer
+ *                   comment:
+ *                     type: string
+ *                   reviewer_name:
+ *                     type: string
+ *                   created_at:
+ *                     type: string
+ *       404:
+ *         description: User not found
+ */
+
 const router = require('express').Router();
 const { body, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
