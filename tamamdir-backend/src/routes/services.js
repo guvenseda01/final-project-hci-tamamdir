@@ -443,7 +443,7 @@ router.patch(
       });
 
       if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
-      updates.push("updated_at = datetime('now')");
+      updates.push("updated_at = NOW()");
       values.push(req.params.id);
 
       await run(`UPDATE services SET ${updates.join(', ')} WHERE id = ?`, values);
@@ -462,7 +462,7 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
     if (!existing) return res.status(404).json({ error: 'Service not found' });
     if (existing.provider_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
 
-    await run("UPDATE services SET is_active = 0, updated_at = datetime('now') WHERE id = ?", [req.params.id]);
+    await run("UPDATE services SET is_active = 0, updated_at = NOW() WHERE id = ?", [req.params.id]);
     return res.json({ message: 'Service deactivated' });
   } catch (err) {
     next(err);
