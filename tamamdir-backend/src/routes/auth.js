@@ -256,14 +256,6 @@ router.post(
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
-      if (!user.is_verified) {
-        return res.status(403).json({
-          error: 'Email not verified',
-          needs_verification: true,
-          email: user.email,
-        });
-      }
-
       const token = signToken({ id: user.id, email: user.email });
       return res.json({ token, user: sanitizeUser(user) });
     } catch (err) {
