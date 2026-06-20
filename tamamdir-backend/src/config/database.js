@@ -33,8 +33,9 @@ const SCHEMA_STATEMENTS = [
     bio              TEXT,
     department       TEXT,
     year             TEXT,
-    is_verified      INTEGER DEFAULT 0,
-    is_provider      INTEGER DEFAULT 0,
+    is_verified          INTEGER DEFAULT 0,
+    is_verified_student  INTEGER DEFAULT 0,
+    is_provider          INTEGER DEFAULT 0,
     wallet_balance   REAL DEFAULT 0.0,
     total_earnings   REAL DEFAULT 0.0,
     rating           REAL DEFAULT 0.0,
@@ -181,6 +182,18 @@ async function initDB() {
   for (const stmt of SCHEMA_STATEMENTS) {
     await pool.query(stmt);
   }
+
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified_student INTEGER DEFAULT 0'
+  );
+  await pool.query(`
+    UPDATE users SET is_verified_student = 1
+    WHERE is_verified_student = 0
+      AND (
+        LOWER(email) LIKE '%@iyte.edu.tr'
+        OR LOWER(email) LIKE '%@std.iyte.edu.tr'
+      )
+  `);
 
   await seed();
   console.log(`📦  PostgreSQL connected: ${process.env.DATABASE_URL}`);

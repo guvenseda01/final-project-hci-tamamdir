@@ -140,7 +140,7 @@ export default function RegisterPage() {
                   <div className="flex items-center gap-1.5 mt-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-green-primary" />
                     <p className="text-xs text-green-primary font-medium">
-                      IYTE email detected — you'll receive a Verified Student badge!
+                      IYTE email detected — after email verification you&apos;ll get the Verified Student badge.
                     </p>
                   </div>
                 ) : form.email ? (
