@@ -179,6 +179,8 @@ async function createAndSendVerificationCode(user) {
   return code;
 }
 
+const EMAIL_NORMALIZE = { gmail_remove_dots: false };
+
 // ── POST /api/auth/register ─────────────────────────────────────────────────
 router.post(
   '/register',
@@ -187,7 +189,11 @@ router.post(
     body('email')
       .trim()
       .isEmail().withMessage('Valid e-mail required')
+<<<<<<< HEAD
       .normalizeEmail(EMAIL_NORM),
+=======
+      .normalizeEmail(EMAIL_NORMALIZE),
+>>>>>>> 1e25645 (email normalization removed from login page)
     body('password')
       .isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
   ],
@@ -234,7 +240,11 @@ router.post(
 router.post(
   '/login',
   [
+<<<<<<< HEAD
     body('email').trim().isEmail().normalizeEmail(EMAIL_NORM),
+=======
+    body('email').trim().isEmail().normalizeEmail(EMAIL_NORMALIZE),
+>>>>>>> 1e25645 (email normalization removed from login page)
     body('password').notEmpty(),
   ],
   async (req, res, next) => {
