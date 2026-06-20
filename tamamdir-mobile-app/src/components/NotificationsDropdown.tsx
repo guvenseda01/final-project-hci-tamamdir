@@ -18,6 +18,7 @@ function isUnread(n: Notification) {
 
 function typeIcon(type: string) {
   if (type.includes("message")) return "chat";
+  if (type.includes("review")) return "rate_review";
   if (type.includes("order")) return "shopping_bag";
   if (type.includes("service")) return "design_services";
   return "notifications";
@@ -90,9 +91,22 @@ export default function NotificationsDropdown() {
   function handleItemClick(n: Notification) {
     if (isUnread(n)) markRead(n.id);
     setOpen(false);
-    if (n.type.includes("message")) navigate("/messages");
-    else if (n.type.includes("order")) navigate("/history");
-    else if (n.type.includes("service")) navigate("/services");
+
+    if (n.type.includes("message") && n.ref_id) {
+      navigate("/messages", { state: { openConversationId: n.ref_id } });
+      return;
+    }
+    if (n.type.includes("review") && n.ref_id) {
+      navigate(`/services/${n.ref_id}/manage`);
+      return;
+    }
+    if (n.type.includes("order")) {
+      navigate("/history");
+      return;
+    }
+    if (n.type.includes("service")) {
+      navigate(n.ref_id ? `/services/${n.ref_id}` : "/services");
+    }
   }
 
   return (

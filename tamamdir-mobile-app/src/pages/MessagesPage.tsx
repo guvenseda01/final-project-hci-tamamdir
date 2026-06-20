@@ -62,6 +62,16 @@ export default function MessagesPage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    const convId = locationState.openConversationId as string | undefined;
+    if (!convId || conversations.length === 0) return;
+    const conv = conversations.find((c) => c.id === convId);
+    if (conv) {
+      setActiveChat(conv);
+      setActiveChatService(loadServiceContext(convId));
+    }
+  }, [locationState.openConversationId, conversations]);
+
   if (activeChat) {
     return (
       <ChatView

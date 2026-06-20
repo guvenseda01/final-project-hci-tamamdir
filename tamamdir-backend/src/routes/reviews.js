@@ -132,6 +132,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const { run, get, all } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const { createNotification } = require('../utils/notifications');
 
 // ── POST /api/reviews ────────────────────────────────────────────────────────
 router.post(
@@ -166,8 +167,18 @@ router.post(
 
       // Recalculate service rating
       await recalcServiceRating(order.service_id);
-      // Recalculate provider rating
       await recalcProviderRating(order.provider_id);
+
+      const reviewer = await get('SELECT full_name FROM users WHERE id = ?', [req.user.id]);
+      const service = await get('SELECT title FROM services WHERE id = ?', [order.service_id]);
+
+      await createNotification({
+        user_id: order.provider_id,
+        type:    'review_new',
+        title:   'Yeni yorum aldın',
+        body:    `${reviewer?.full_name ?? 'Bir kullanıcı'} "${service?.title ?? 'hizmetin'}" için ${rating} yıldız bıraktı.`,
+        ref_id:  order.service_id,
+      });
 
       const review = await get(
         `SELECT r.*, u.full_name AS reviewer_name, u.avatar_url AS reviewer_avatar

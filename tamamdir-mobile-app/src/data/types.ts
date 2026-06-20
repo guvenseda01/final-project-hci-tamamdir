@@ -66,11 +66,14 @@ export interface Conversation {
 
 export interface ServiceHistory {
   id: string;
+  serviceId: string;
   serviceTitle: string;
   amount: string;
   partnerName: string;
   partnerAvatar: string;
-  status: "completed" | "pending" | "cancelled";
+  status: "completed" | "pending" | "cancelled" | "accepted" | "in_progress";
   date: string;
   type: "requested" | "provided";
+  hasReview: boolean;
+  note?: string;
 }
