@@ -40,8 +40,8 @@ export default function HomePage() {
         {/* Stats */}
         <section className="px-4 -mt-6 relative z-30 grid grid-cols-2 gap-3">
           {[
-            { icon: "verified_user", label: "Doğrulanmış", value: "1.200+ Öğrenci" },
-            { icon: "bolt", label: "Tamamlanan", value: "450+ İşlem" },
+            { icon: "design_services", label: "Aktif Hizmet", value: services.length > 0 ? `${services.length}+` : "—" },
+            { icon: "bolt", label: "Kategori", value: services.length > 0 ? `${Array.from(new Set(services.map(s => s.category))).length}` : "—" },
           ].map((s) => (
             <div key={s.label} className="bg-white p-4 rounded-2xl shadow-card border border-slate-100 flex items-center gap-3">
               <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center">

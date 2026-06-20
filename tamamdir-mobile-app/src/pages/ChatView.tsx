@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { Conversation, Message } from "../data/types";
-import { CURRENT_USER } from "../data/mockData";
+import { useAuth } from "../context/AuthContext";
+import api from "../lib/api";
 
 interface ChatViewProps {
   conversation: Conversation;
@@ -8,25 +9,45 @@ interface ChatViewProps {
 }
 
 export default function ChatView({ conversation, onBack }: ChatViewProps) {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>(conversation.messages);
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    api.get(`/api/messages/conversations/${conversation.id}`)
+      .then((data: any) => {
+        const list = Array.isArray(data) ? data : [];
+        setMessages(list.map((m: any) => ({
+          id: m.id,
+          text: m.content ?? "",
+          senderId: m.sender_id,
+          timestamp: m.created_at
+            ? new Date(m.created_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+            : "",
+        })));
+      })
+      .catch(() => {});
+  }, [conversation.id]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function sendMessage() {
+  async function sendMessage() {
     const text = input.trim();
     if (!text) return;
     const newMsg: Message = {
       id: `m${Date.now()}`,
       text,
-      senderId: CURRENT_USER.id,
+      senderId: user?.id ?? "",
       timestamp: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
     };
     setMessages((prev) => [...prev, newMsg]);
     setInput("");
+    try {
+      await api.post(`/api/messages/conversations/${conversation.id}`, { content: text });
+    } catch {}
   }
 
   function handleKey(e: React.KeyboardEvent) {
@@ -48,7 +69,7 @@ export default function ChatView({ conversation, onBack }: ChatViewProps) {
 
       <div className="flex-1 pt-20 pb-20 overflow-y-auto px-4 space-y-3">
         {messages.map((msg) => {
-          const isMe = msg.senderId === CURRENT_USER.id;
+          const isMe = msg.senderId === user?.id;
           return (
             <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${isMe ? "bg-primary text-on-primary rounded-br-sm" : "bg-white text-on-surface rounded-bl-sm shadow-card"}`}>

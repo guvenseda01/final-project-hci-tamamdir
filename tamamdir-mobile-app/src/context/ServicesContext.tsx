@@ -70,9 +70,11 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     try {
       setError(null);
       const data = await api.get('/api/services?limit=50');
-      setServices((data.services as ApiService[]).map(mapService));
+      const arr: ApiService[] = Array.isArray(data) ? data : (data?.services ?? []);
+      setServices(arr.map(mapService));
     } catch {
-      setError("Servisler yüklenemedi.");
+      setError("Hizmetler yüklenemedi.");
+      setServices([]);
     } finally {
       setLoading(false);
     }

@@ -1,21 +1,23 @@
 import { useState } from "react";
 import { useNavigate, useParams, Navigate } from "react-router-dom";
-import { CURRENT_USER, REVIEWS } from "../data/mockData";
 import { useServices } from "../context/ServicesContext";
+import { useAuth } from "../context/AuthContext";
+import type { Review } from "../data/types";
 
 export default function ServiceOwnerViewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { services } = useServices();
+  const { user } = useAuth();
 
   const service = services.find((s) => s.id === id);
-  const reviews = REVIEWS.filter((r) => r.id && r.serviceId === id);
+  const reviews: Review[] = [];
 
   const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
   const [submittedReplies, setSubmittedReplies] = useState<Record<string, string>>({});
 
   if (!service) return <Navigate to="/services" replace />;
-  if (service.providerId !== CURRENT_USER.id) return <Navigate to={`/services/${id}`} replace />;
+  if (service.providerId !== user?.id) return <Navigate to={`/services/${id}`} replace />;
 
   function submitReply(reviewId: string) {
     const text = replyInputs[reviewId]?.trim();
@@ -46,7 +48,10 @@ export default function ServiceOwnerViewPage() {
           </h1>
         </div>
         <div className="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden border border-outline-variant/30">
-          <img src={CURRENT_USER.avatar} alt="Owner Profile" className="w-full h-full object-cover" />
+          {user?.avatar
+            ? <img src={user.avatar} alt="Profil" className="w-full h-full object-cover" />
+            : <span className="material-symbols-outlined text-on-secondary-container text-sm">person</span>
+          }
         </div>
       </header>
 
@@ -184,7 +189,7 @@ export default function ServiceOwnerViewPage() {
                     {submittedReplies[review.id] ? (
                       <div className="bg-surface-container-low p-sm rounded-lg border-l-4 border-primary">
                         <p className="font-label-sm text-label-sm font-bold text-primary mb-1">
-                          {CURRENT_USER.name} (Sen)
+                          {user?.name ?? "Sen"} (Sen)
                         </p>
                         <p className="font-body-md text-body-md text-on-surface-variant">
                           {submittedReplies[review.id]}
@@ -193,12 +198,11 @@ export default function ServiceOwnerViewPage() {
                     ) : (
                       <div>
                         <div className="flex items-center gap-2 mb-2">
-                          <div className="w-6 h-6 rounded-full overflow-hidden bg-primary-fixed">
-                            <img
-                              src={CURRENT_USER.avatar}
-                              alt={CURRENT_USER.name}
-                              className="w-full h-full object-cover"
-                            />
+                          <div className="w-6 h-6 rounded-full overflow-hidden bg-secondary-container flex items-center justify-center">
+                            {user?.avatar
+                              ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                              : <span className="material-symbols-outlined text-on-secondary-container text-xs">person</span>
+                            }
                           </div>
                           <span className="font-label-sm text-label-sm font-bold text-primary">
                             Your Reply

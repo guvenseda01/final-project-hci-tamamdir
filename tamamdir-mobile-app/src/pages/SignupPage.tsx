@@ -36,7 +36,7 @@ export default function SignupPage() {
     setApiError(null);
     try {
       await register(form.name, form.email, form.password);
-      navigate("/");
+      navigate("/login");
     } catch (err: unknown) {
       const msg = (err as { message?: string }).message ?? "";
       if (!msg || msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {

@@ -1,19 +1,40 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import TopBar from "../components/TopBar";
 import BottomNav from "../components/BottomNav";
 import ChatView from "./ChatView";
-import { CONVERSATIONS } from "../data/mockData";
 import type { Conversation } from "../data/types";
+import api from "../lib/api";
 
 export default function MessagesPage() {
   const [search, setSearch] = useState("");
   const [activeChat, setActiveChat] = useState<Conversation | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+
+  useEffect(() => {
+    api.get('/api/messages/conversations')
+      .then((data: any) => {
+        const list = Array.isArray(data) ? data : [];
+        setConversations(list.map((c: any) => ({
+          id: c.id,
+          participantId: c.other_id ?? "",
+          participantName: c.other_name ?? "",
+          participantAvatar: c.other_avatar ?? "",
+          lastMessage: c.last_message ?? "",
+          lastTime: c.last_message_at
+            ? new Date(c.last_message_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+            : "",
+          unread: (c.unread_count ?? 0) > 0,
+          messages: [],
+        })));
+      })
+      .catch(() => {});
+  }, []);
 
   if (activeChat) {
     return <ChatView conversation={activeChat} onBack={() => setActiveChat(null)} />;
   }
 
-  const filtered = CONVERSATIONS.filter(
+  const filtered = conversations.filter(
     (c) =>
       c.participantName.toLowerCase().includes(search.toLowerCase()) ||
       c.lastMessage.toLowerCase().includes(search.toLowerCase())

@@ -135,11 +135,12 @@ async function main() {
     if (!svc) continue;
 
     const orderId = uuidv4();
+    const completedAt = new Date(Date.now() - daysAgo * 86400000).toISOString();
     const completedAt = `NOW() - INTERVAL '${daysAgo} days'`;
     await run(
       `INSERT INTO orders (id, service_id, buyer_id, provider_id, status, price_at_order, completed_at, updated_at)
-       VALUES (?, ?, ?, ?, 'completed', ?, ${completedAt}, ${completedAt})`,
-      [orderId, serviceId, uid[o.buyer], svc.provider_id, svc.price]
+       VALUES (?, ?, ?, ?, 'completed', ?, ?, ?)`,
+      [orderId, serviceId, uid[o.buyer], svc.provider_id, svc.price, completedAt, completedAt]
     );
     await run('UPDATE services SET order_count = order_count + 1 WHERE id = ?', [serviceId]);
 
@@ -180,8 +181,11 @@ async function main() {
       // Conversation + messages between Refia ↔ Deniz
       const [pA, pB] = [refiaId, svc.provider_id].sort();
       const convId = uuidv4();
+      const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
       await run(
         `INSERT INTO conversations (id, participant_a, participant_b, last_message, last_msg_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [convId, pA, pB, 'Sure! Send me your code and we can schedule a session.', thirtyMinsAgo]
          VALUES (?, ?, ?, ?, NOW() - INTERVAL '30 minutes')`,
         [convId, pA, pB, 'Sure! Send me your code and we can schedule a session.']
       );

@@ -21,7 +21,7 @@ function mapUser(u: ApiUser): User {
     email: u.email,
     department: u.department ?? "",
     year: "",
-    avatar: u.avatar_url ?? `https://i.pravatar.cc/150?u=${u.id}`,
+    avatar: u.avatar_url ?? "",
     verified: u.is_verified === 1,
     rating: u.rating ?? 0,
     completedServices: 0,
@@ -36,6 +36,8 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+  updateAvatar: (dataUrl: string) => void;
+  updateUser: (fields: Partial<Pick<User, "name" | "email">>) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -45,15 +47,23 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   register: async () => {},
   logout: () => {},
+  updateAvatar: () => {},
+  updateUser: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  function mergeLocalOverrides(mapped: User): User {
+    const savedAvatar = localStorage.getItem(`avatar_${mapped.id}`);
+    const savedFields = JSON.parse(localStorage.getItem(`userFields_${mapped.id}`) ?? '{}');
+    return { ...mapped, ...savedFields, ...(savedAvatar ? { avatar: savedAvatar } : {}) };
+  }
+
   const fetchMe = useCallback(async () => {
     const data: ApiUser = await api.get('/api/auth/me');
-    setUser(mapUser(data));
+    setUser(mergeLocalOverrides(mapUser(data)));
   }, []);
 
   useEffect(() => {
@@ -69,13 +79,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function login(email: string, password: string) {
     const data = await api.post('/api/auth/login', { email, password });
     localStorage.setItem('token', data.token);
-    setUser(mapUser(data.user));
+    setUser(mergeLocalOverrides(mapUser(data.user)));
   }
 
   async function register(name: string, email: string, password: string) {
-    const data = await api.post('/api/auth/register', { full_name: name, email, password });
-    localStorage.setItem('token', data.token);
-    setUser(mapUser(data.user));
+    await api.post('/api/auth/register', { full_name: name, email, password });
   }
 
   function logout() {
@@ -83,8 +91,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  function updateAvatar(dataUrl: string) {
+    if (user?.id) localStorage.setItem(`avatar_${user.id}`, dataUrl);
+    setUser((prev) => prev ? { ...prev, avatar: dataUrl } : prev);
+  }
+
+  function updateUser(fields: Partial<Pick<User, "name" | "email">>) {
+    if (user?.id) {
+      const existing = JSON.parse(localStorage.getItem(`userFields_${user.id}`) ?? '{}');
+      localStorage.setItem(`userFields_${user.id}`, JSON.stringify({ ...existing, ...fields }));
+    }
+    setUser((prev) => prev ? { ...prev, ...fields } : prev);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn: !!user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoggedIn: !!user, loading, login, register, logout, updateAvatar, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

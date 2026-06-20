@@ -25,13 +25,12 @@ export default function ProfilePage() {
 
   const accountRows: SettingsRow[] = [
     { icon: "person", label: "Kişisel Bilgiler", sub: "Ad, E-posta, Öğrenci No", to: "/account" },
-    { icon: "manage_accounts", label: "Profil Yönetimi", sub: "Hizmetler, Kimlik, Ödeme", to: "/profile/manage" },
     { icon: "edit_attributes", label: "Kişiselleştirme", sub: "Tema, Dil, Erişilebilirlik", to: "/personalization" },
   ];
 
   const privacyRows: SettingsRow[] = [
     { icon: "shield", label: "Güvenlik", sub: "Şifre, 2FA, Giriş Cihazları" },
-    { icon: "settings_account_box", label: "Hesap Yönetimi", sub: "Deaktif, Gizlilik, Veri", to: "/account" },
+    { icon: "settings_account_box", label: "Hesap Yönetimi", sub: "Bildirimler, Doğrulama, Veri", to: "/account/settings" },
   ];
 
   return (
@@ -56,11 +55,17 @@ export default function ProfilePage() {
           <div className="relative z-10 flex flex-col items-center text-center">
             <div className="relative mb-4">
               <div className="w-24 h-24 rounded-full border-4 border-primary-container p-1 bg-surface-container-lowest">
-                <img
-                  src={user?.avatar || "https://i.pravatar.cc/150?img=3"}
-                  alt="Profil"
-                  className="w-full h-full rounded-full object-cover"
-                />
+                {user?.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt="Profil"
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full rounded-full bg-secondary-container flex items-center justify-center">
+                    <span className="material-symbols-outlined text-on-secondary-container text-4xl">person</span>
+                  </div>
+                )}
               </div>
               {verified && (
                 <div className="absolute bottom-1 right-1 bg-primary-container text-on-primary-container rounded-full p-1 border-2 border-inverse-surface">
@@ -88,9 +93,9 @@ export default function ProfilePage() {
         <section className="px-gutter -mt-6 relative z-20">
           <div className="grid grid-cols-3 gap-3 bg-surface-container-lowest shadow-card rounded-xl p-4 border border-outline-variant/30">
             {[
-              { val: user?.completedServices || 12, label: "Tamamlanan" },
-              { val: user?.rating || 4.9, label: "Puan" },
-              { val: user?.activeServices || 8, label: "Hizmet" },
+              { val: user?.completedServices ?? 0, label: "Tamamlanan" },
+              { val: user?.rating ? user.rating.toFixed(1) : "—", label: "Puan" },
+              { val: user?.activeServices ?? 0, label: "Hizmet" },
             ].map((s, i) => (
               <div key={i} className={`text-center ${i < 2 ? "border-r border-outline-variant/30" : ""}`}>
                 <div className="text-xl font-bold text-primary">{s.val}</div>
@@ -154,18 +159,6 @@ export default function ProfilePage() {
                   <span className="material-symbols-outlined text-sm">manage_accounts</span>
                   Yönet
                 </button>
-              </div>
-              <div className="mt-4 p-3 bg-surface rounded-xl flex items-center justify-between border border-outline-variant/20">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-sm">
-                    <span className="material-symbols-outlined text-primary">code</span>
-                  </div>
-                  <span className="text-xs font-bold">Python Eğitimi</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded-full font-bold">AKTİF</span>
-                  <span className="material-symbols-outlined text-outline text-lg">more_vert</span>
-                </div>
               </div>
             </div>
           </div>

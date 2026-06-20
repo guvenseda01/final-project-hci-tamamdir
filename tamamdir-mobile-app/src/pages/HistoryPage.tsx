@@ -1,17 +1,41 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import TopBar from "../components/TopBar";
 import BottomNav from "../components/BottomNav";
-import { SERVICE_HISTORY } from "../data/mockData";
+import type { ServiceHistory } from "../data/types";
+import api from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
 type Tab = "requested" | "provided";
 
 export default function HistoryPage() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<Tab>("requested");
+  const [history, setHistory] = useState<ServiceHistory[]>([]);
 
-  const filtered = SERVICE_HISTORY.filter((h) => h.type === tab);
+  useEffect(() => {
+    api.get('/api/orders')
+      .then((data: any) => {
+        const list = Array.isArray(data) ? data : [];
+        setHistory(list.map((o: any) => {
+          const isBuyer = o.buyer_id === user?.id;
+          return {
+            id: o.id,
+            serviceTitle: o.service_title ?? o.title ?? "Hizmet",
+            amount: `₺${o.amount ?? o.price ?? 0}`,
+            partnerName: isBuyer ? (o.provider_name ?? "") : (o.buyer_name ?? ""),
+            partnerAvatar: isBuyer ? (o.provider_avatar ?? "") : (o.buyer_avatar ?? ""),
+            status: (o.status === "completed" ? "completed" : o.status === "cancelled" ? "cancelled" : "pending") as ServiceHistory["status"],
+            date: o.created_at ? new Date(o.created_at).toLocaleDateString("tr-TR") : "",
+            type: (isBuyer ? "requested" : "provided") as ServiceHistory["type"],
+          };
+        }));
+      })
+      .catch(() => {});
+  }, [user?.id]);
 
-  const totalCompleted = SERVICE_HISTORY.filter((h) => h.status === "completed").length;
-  const totalEarnings = SERVICE_HISTORY.filter((h) => h.type === "provided" && h.status === "completed")
+  const filtered = history.filter((h) => h.type === tab);
+  const totalCompleted = history.filter((h) => h.status === "completed").length;
+  const totalEarnings = history.filter((h) => h.type === "provided" && h.status === "completed")
     .reduce((sum, h) => sum + parseInt(h.amount.replace(/\D/g, "")), 0);
 
   return (
@@ -43,7 +67,7 @@ export default function HistoryPage() {
               <span className="text-xs text-on-surface-variant">Tamamlanan</span>
             </div>
             <p className="font-bold text-2xl text-on-surface">{totalCompleted}</p>
-            <p className="text-primary font-bold text-[10px]">+3 bu hafta</p>
+            <p className="text-primary font-bold text-[10px]">Geçmiş hizmetler</p>
           </div>
           <div className="bg-white p-md rounded-xl shadow-card border border-slate-50">
             <div className="flex items-center gap-base mb-xs">
