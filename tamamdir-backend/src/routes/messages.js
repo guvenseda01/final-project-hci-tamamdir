@@ -143,7 +143,7 @@ router.post(
 
       // Update conversation last message
       await run(
-        `UPDATE conversations SET last_message = ?, last_msg_at = datetime('now') WHERE id = ?`,
+        `UPDATE conversations SET last_message = ?, last_msg_at = NOW() WHERE id = ?`,
         [req.body.content.slice(0, 100), req.params.id]
       );
 

@@ -142,7 +142,7 @@ router.patch('/:id/complete', requireAuth, async (req, res, next) => {
 
     await run(
       `UPDATE orders
-       SET status = 'completed', completed_at = datetime('now'), updated_at = datetime('now')
+       SET status = 'completed', completed_at = NOW(), updated_at = NOW()
        WHERE id = ?`,
       [order.id]
     );
@@ -192,8 +192,8 @@ router.patch(
 
       await run(
         `UPDATE orders
-         SET status = 'cancelled', cancelled_at = datetime('now'),
-             cancel_reason = ?, updated_at = datetime('now')
+         SET status = 'cancelled', cancelled_at = NOW(),
+             cancel_reason = ?, updated_at = NOW()
          WHERE id = ?`,
         [req.body.reason || null, order.id]
       );
@@ -228,7 +228,7 @@ async function transitionOrder(req, res, next, newStatus, authCheck) {
     }
 
     await run(
-      `UPDATE orders SET status = ?, updated_at = datetime('now') WHERE id = ?`,
+      `UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?`,
       [newStatus, order.id]
     );
 
