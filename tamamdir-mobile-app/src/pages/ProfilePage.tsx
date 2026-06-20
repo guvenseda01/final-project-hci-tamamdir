@@ -10,7 +10,7 @@ interface SettingsRow {
 }
 
 function isIyteStudent(email?: string) {
-  return email?.endsWith("@std.iyte.edu.tr") ?? false;
+  return (email?.endsWith("@std.iyte.edu.tr") || email?.endsWith("@iyte.edu.tr")) ?? false;
 }
 
 export default function ProfilePage() {
