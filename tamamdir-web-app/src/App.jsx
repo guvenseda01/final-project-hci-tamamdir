@@ -8,6 +8,7 @@ import ServicesPage from './pages/ServicesPage'
 import ServiceDetailPage from './pages/ServiceDetailPage'
 import CreateServicePage from './pages/CreateServicePage'
 import MessagesPage from './pages/MessagesPage'
+import NotificationsPage from './pages/NotificationsPage'
 import ProfilePage from './pages/ProfilePage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import RegisterWelcomePage from './pages/RegisterWelcomePage'
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/services/new" element={<ProtectedRoute><CreateServicePage /></ProtectedRoute>} />
           <Route path="/services/:id" element={<ProtectedRoute><ServiceDetailPage /></ProtectedRoute>} />
           <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
