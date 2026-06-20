@@ -2,10 +2,6 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-function validateIyteEmail(email: string) {
-  return email.endsWith("@iyte.edu.tr") || email.endsWith("@std.iyte.edu.tr");
-}
-
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -18,7 +14,7 @@ export default function LoginPage() {
   function validate() {
     const errs: { email?: string; password?: string } = {};
     if (!email) errs.email = "E-posta zorunludur.";
-    else if (!validateIyteEmail(email)) errs.email = "@iyte.edu.tr veya @std.iyte.edu.tr gerekli.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = "Geçerli bir e-posta girin.";
     if (!password) errs.password = "Şifre zorunludur.";
     else if (password.length < 6) errs.password = "Şifre en az 6 karakter olmalı.";
     return errs;
@@ -88,7 +84,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => { setEmail(e.target.value); setErrors((p) => ({ ...p, email: undefined })); }}
                   className="w-full h-14 pl-12 pr-4 rounded-xl border border-outline-variant bg-surface-container-low focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all text-body-md"
-                  placeholder="ogrenci@std.iyte.edu.tr"
+                  placeholder="ornek@mail.com"
                 />
               </div>
               {errors.email && <p className="text-error text-xs px-1">{errors.email}</p>}
