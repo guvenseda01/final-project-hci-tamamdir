@@ -89,7 +89,7 @@ function PersonalInfo({ user, onAvatarUpdated }) {
           <div>
             <p className="font-semibold text-gray-900">{user.full_name}</p>
             <p className="text-sm text-gray-500">{user.department ?? 'No department set'}</p>
-            {user.is_verified === 1 && (
+            {user.is_verified_student && (
               <div className="flex items-center gap-1.5 mt-1">
                 <CheckCircle2 className="w-4 h-4 text-green-primary" />
                 <span className="text-xs text-green-primary font-medium">Verified Student</span>
@@ -381,7 +381,7 @@ function AccountManagement({ user }) {
           <p className="text-xs text-gray-400 mb-1">University Email</p>
           <div className="flex items-center gap-3">
             <p className="text-sm font-semibold text-gray-900">{user.email}</p>
-            {user.is_verified === 1 && (
+            {user.is_verified_student && (
               <span className="flex items-center gap-1 bg-green-pale text-green-primary text-xs font-semibold px-2.5 py-0.5 rounded-full">
                 <CheckCircle2 className="w-3 h-3" />
                 Verified
@@ -515,7 +515,7 @@ export default function ProfilePage() {
                       <span className="text-green-primary font-bold text-2xl">{user.full_name?.[0] ?? '?'}</span>
                     </div>
                   )}
-                  {user.is_verified === 1 && (
+                  {user.is_verified_student && (
                     <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-primary rounded-full flex items-center justify-center border-2 border-white">
                       <CheckCircle2 className="w-3 h-3 text-white" strokeWidth={3} />
                     </div>
@@ -524,7 +524,7 @@ export default function ProfilePage() {
                 <p className="font-semibold text-gray-900 text-sm">
                   {user.full_name?.split(' ')[0]} Profile
                 </p>
-                {user.is_verified === 1 && (
+                {user.is_verified_student && (
                   <div className="flex items-center justify-center gap-1 mt-1">
                     <CheckCircle2 className="w-3.5 h-3.5 text-green-primary" />
                     <span className="text-xs text-green-primary font-medium">Verified Student</span>
