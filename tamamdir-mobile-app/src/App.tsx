@@ -1,9 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ServicesProvider } from "./context/ServicesContext";
+import { PreferencesProvider } from "./context/PreferencesContext";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 import ServicesPage from "./pages/ServicesPage";
 import ServiceDetailPage from "./pages/ServiceDetailPage";
 import MessagesPage from "./pages/MessagesPage";
@@ -17,6 +19,9 @@ import EditServicePage from "./pages/EditServicePage";
 import ProfileManagePage from "./pages/ProfileManagePage";
 import ServiceOwnerViewPage from "./pages/ServiceOwnerViewPage";
 import OnboardingPage from "./pages/OnboardingPage";
+import HelpPage from "./pages/HelpPage";
+import FavoritesPage from "./pages/FavoritesPage";
+import SecurityPage from "./pages/SecurityPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, loading } = useAuth();
@@ -33,6 +38,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/onboarding" element={<RequireAuth><OnboardingPage /></RequireAuth>} />
       <Route path="/" element={<RequireAuth><HomePage /></RequireAuth>} />
       <Route path="/services" element={<RequireAuth><ServicesPage /></RequireAuth>} />
@@ -46,6 +52,9 @@ function AppRoutes() {
       <Route path="/profile/manage" element={<RequireAuth><ProfileManagePage /></RequireAuth>} />
       <Route path="/account" element={<RequireAuth><AccountPage /></RequireAuth>} />
       <Route path="/account/settings" element={<RequireAuth><AccountSettingsPage /></RequireAuth>} />
+      <Route path="/account/security" element={<RequireAuth><SecurityPage /></RequireAuth>} />
+      <Route path="/favorites" element={<RequireAuth><FavoritesPage /></RequireAuth>} />
+      <Route path="/help" element={<RequireAuth><HelpPage /></RequireAuth>} />
       <Route path="/personalization" element={<RequireAuth><PersonalizationPage /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -53,13 +62,19 @@ function AppRoutes() {
 }
 
 function App() {
+  const basename = import.meta.env.BASE_URL === '/'
+    ? undefined
+    : import.meta.env.BASE_URL.replace(/\/$/, '');
+
   return (
     <AuthProvider>
-      <ServicesProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </ServicesProvider>
+      <PreferencesProvider>
+        <ServicesProvider>
+          <BrowserRouter basename={basename}>
+            <AppRoutes />
+          </BrowserRouter>
+        </ServicesProvider>
+      </PreferencesProvider>
     </AuthProvider>
   );
 }

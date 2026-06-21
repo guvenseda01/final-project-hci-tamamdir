@@ -7,6 +7,10 @@ export default {
   theme: {
     extend: {
       colors: {
+        coffee: {
+          DEFAULT: '#8B5E3C',
+          muted: '#8B5E3CD9',
+        },
         green: {
           primary: '#1B5E3B',
           dark: '#14472D',

@@ -264,12 +264,18 @@ const { run, get, all } = require('../config/database');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { serviceImageUpload } = require('../middleware/upload');
 
+const { LOCATION_TYPES } = require('../constants/locations');
+
+
 // ── GET /api/services ───────────────────────────────────────────────────────
 router.get('/', optionalAuth, async (req, res, next) => {
   try {
     const {
       q,            // free-text search
       category,     // category slug or id
+      location_type: locationTypeFilter, // preferred query param
+      location,     // legacy alias
+      interests,    // "1" or "true" — filter to authenticated user's interest categories
       min_price,
       max_price,
       sort = 'newest', // newest | rating | price_asc | price_desc | popular
@@ -289,6 +295,35 @@ router.get('/', optionalAuth, async (req, res, next) => {
     if (category) {
       where.push('(c.slug = ? OR c.id = ?)');
       params.push(category, category);
+    }
+
+    const locationFilter = locationTypeFilter || location;
+    if (locationFilter) {
+      if (LOCATION_TYPES.includes(locationFilter)) {
+        where.push('s.location_type = ?');
+        params.push(locationFilter);
+      } else {
+        where.push('1 = 0');
+      }
+    }
+
+    if (interests === '1' || interests === 'true') {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required for interest-based filtering' });
+      }
+      const userInterests = await all(
+        'SELECT category_id FROM user_interests WHERE user_id = ?',
+        [req.user.id]
+      );
+      const categoryIds = userInterests.map((row) => row.category_id);
+      if (categoryIds.length === 0) {
+        return res.json({
+          services: [],
+          pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), pages: 0 },
+        });
+      }
+      where.push(`s.category_id IN (${categoryIds.map(() => '?').join(', ')})`);
+      params.push(...categoryIds);
     }
 
     if (min_price) {
@@ -314,7 +349,8 @@ router.get('/', optionalAuth, async (req, res, next) => {
       SELECT s.*,
              c.name AS category_name, c.slug AS category_slug, c.icon AS category_icon,
              u.full_name AS provider_name, u.avatar_url AS provider_avatar,
-             u.is_verified AS provider_verified, u.rating AS provider_rating
+             (CASE WHEN u.is_verified = 1 AND u.is_verified_student = 1 THEN 1 ELSE 0 END) AS provider_verified,
+             u.rating AS provider_rating
       FROM services s
       JOIN categories c ON c.id = s.category_id
       JOIN users u      ON u.id = s.provider_id
@@ -369,13 +405,22 @@ router.post(
     body('price').isFloat({ min: 1 }),
     body('price_unit').optional().isIn(['session', 'hour', 'item', 'day', 'piece']),
     body('delivery_days').optional().isInt({ min: 1, max: 90 }),
+    body('location_type').optional().isIn(LOCATION_TYPES),
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
 
     try {
-      const { title, description, category_id, price, price_unit = 'session', delivery_days = 1 } = req.body;
+      const {
+        title,
+        description,
+        category_id,
+        price,
+        price_unit = 'session',
+        delivery_days = 1,
+        location_type = 'on_campus',
+      } = req.body;
 
       // Verify category exists
       const cat = await get('SELECT id FROM categories WHERE id = ?', [category_id]);
@@ -383,9 +428,9 @@ router.post(
 
       const id = uuidv4();
       await run(
-        `INSERT INTO services (id, provider_id, category_id, title, description, price, price_unit, delivery_days)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, req.user.id, category_id, title, description, price, price_unit, delivery_days]
+        `INSERT INTO services (id, provider_id, category_id, title, description, price, price_unit, delivery_days, location_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, req.user.id, category_id, title, description, price, price_unit, delivery_days, location_type]
       );
 
       // Mark user as provider
@@ -417,10 +462,11 @@ router.patch(
   [
     body('title').optional().trim().notEmpty().isLength({ max: 120 }),
     body('description').optional().isLength({ max: 2000 }),
-    body('price').optional().isFloat({ min: 1 }),
+    body('price').optional().toFloat().isFloat({ min: 1 }),
     body('price_unit').optional().isIn(['session', 'hour', 'item', 'day', 'piece']),
-    body('delivery_days').optional().isInt({ min: 1, max: 90 }),
-    body('is_active').optional().isBoolean(),
+    body('delivery_days').optional().toInt().isInt({ min: 1, max: 90 }),
+    body('location_type').optional().isIn(LOCATION_TYPES),
+    body('is_active').optional().custom((v) => v === true || v === false || v === 0 || v === 1),
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -431,14 +477,20 @@ router.patch(
       if (!existing) return res.status(404).json({ error: 'Service not found' });
       if (existing.provider_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
 
-      const fields  = ['title', 'description', 'price', 'price_unit', 'delivery_days', 'is_active'];
+      const fields  = ['title', 'description', 'price', 'price_unit', 'delivery_days', 'location_type', 'is_active'];
       const updates = [];
       const values  = [];
 
       fields.forEach(f => {
         if (req.body[f] !== undefined) {
           updates.push(`${f} = ?`);
-          values.push(req.body[f]);
+          if (f === 'is_active') {
+            values.push(req.body[f] ? 1 : 0);
+          } else if (f === 'price') {
+            values.push(parseFloat(req.body[f]));
+          } else {
+            values.push(req.body[f]);
+          }
         }
       });
 
@@ -531,7 +583,8 @@ async function getFullService(id) {
             c.name AS category_name, c.slug AS category_slug, c.icon AS category_icon,
             u.full_name AS provider_name, u.avatar_url AS provider_avatar,
             u.bio AS provider_bio, u.department AS provider_department,
-            u.year AS provider_year, u.is_verified AS provider_verified,
+            u.year AS provider_year,
+            (CASE WHEN u.is_verified = 1 AND u.is_verified_student = 1 THEN 1 ELSE 0 END) AS provider_verified,
             u.rating AS provider_rating, u.review_count AS provider_review_count
      FROM services s
      JOIN categories c ON c.id = s.category_id
@@ -545,6 +598,9 @@ async function getFullService(id) {
     'SELECT id, image_url, is_cover, sort_order FROM service_images WHERE service_id = ? ORDER BY sort_order',
     [id]
   );
+
+  const cover = service.images.find(i => i.is_cover === 1);
+  service.cover_image = cover ? cover.image_url : (service.images[0]?.image_url ?? null);
 
   service.recent_reviews = await all(
     `SELECT r.*, u.full_name AS reviewer_name, u.avatar_url AS reviewer_avatar

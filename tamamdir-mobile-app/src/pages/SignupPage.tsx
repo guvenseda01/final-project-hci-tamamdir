@@ -35,8 +35,13 @@ export default function SignupPage() {
     setLoading(true);
     setApiError(null);
     try {
-      await register(form.name, form.email, form.password);
-      navigate("/login");
+      const data = await register(form.name, form.email, form.password);
+      navigate("/verify-email", {
+        state: {
+          email: data.email ?? form.email,
+          expiresInMinutes: data.expires_in_minutes ?? 15,
+        },
+      });
     } catch (err: unknown) {
       const msg = (err as { message?: string }).message ?? "";
       if (!msg || msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {

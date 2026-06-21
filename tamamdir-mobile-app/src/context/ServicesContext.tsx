@@ -1,54 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Service } from "../data/types";
 import api from "../lib/api";
-
-interface ApiService {
-  id: string;
-  title: string;
-  description: string;
-  price: number;
-  price_unit: string;
-  category_name: string;
-  category_slug: string;
-  provider_id: string;
-  provider_name: string;
-  provider_avatar: string | null;
-  provider_verified: 0 | 1;
-  provider_department: string | null;
-  rating: number;
-  review_count: number;
-  order_count: number;
-  delivery_days: number;
-  cover_image: string | null;
-}
-
-function mapService(s: ApiService): Service {
-  return {
-    id: s.id,
-    title: s.title,
-    description: s.description,
-    price: `₺${s.price}${s.price_unit !== 'item' ? `/${unitLabel(s.price_unit)}` : ''}`,
-    priceNum: s.price,
-    category: s.category_name,
-    providerId: s.provider_id,
-    providerName: s.provider_name,
-    providerDepartment: s.provider_department ?? "",
-    providerAvatar: s.provider_avatar ?? `https://i.pravatar.cc/150?u=${s.provider_id}`,
-    providerVerified: s.provider_verified === 1,
-    rating: s.rating ?? 0,
-    reviewCount: s.review_count ?? 0,
-    image: s.cover_image ?? `https://picsum.photos/seed/${s.id}/600/400`,
-    tags: [s.category_name],
-    deliveryDays: s.delivery_days,
-    location: "",
-    status: "active",
-  };
-}
-
-function unitLabel(unit: string) {
-  const map: Record<string, string> = { hour: 'sa', session: 'seans', day: 'gün', piece: 'adet' };
-  return map[unit] ?? unit;
-}
+import { mapApiService, type ApiService } from "../lib/serviceMapper";
 
 interface ServicesContextType {
   services: Service[];
@@ -69,9 +22,9 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   async function fetchServices() {
     try {
       setError(null);
-      const data = await api.get('/api/services?limit=50');
+      const data = await api.get("/api/services?limit=50");
       const arr: ApiService[] = Array.isArray(data) ? data : (data?.services ?? []);
-      setServices(arr.map(mapService));
+      setServices(arr.map(mapApiService));
     } catch {
       setError("Hizmetler yüklenemedi.");
       setServices([]);
@@ -80,7 +33,9 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  useEffect(() => { fetchServices(); }, []);
+  useEffect(() => {
+    fetchServices();
+  }, []);
 
   function addService(s: Service) {
     setServices((prev) => [s, ...prev]);
@@ -102,3 +57,5 @@ export function useServices() {
   if (!ctx) throw new Error("useServices must be used within ServicesProvider");
   return ctx;
 }
+
+export { mapApiService };

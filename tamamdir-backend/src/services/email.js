@@ -1,168 +1,88 @@
-const { Resend } = require('resend');
+const RESEND_API_URL = 'https://api.resend.com/emails';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@tamamdir.local';
+function getFromAddress() {
+  return process.env.RESEND_FROM_EMAIL
+    ?? process.env.EMAIL_FROM
+    ?? 'Tamamdır <noreply@tamamdir.local>';
+}
 
-/**
- * Send email verification link
- */
-async function sendVerificationEmail(to, fullName, verifyUrl) {
-  const subject = 'Verify your Tamamdır email';
+async function sendViaResend({ to, subject, html, text }) {
+  const apiKey = process.env.RESEND_API_KEY;
 
-  const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
-    .header h1 { margin: 0; font-size: 28px; }
-    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-    .greeting { font-size: 16px; margin-bottom: 20px; }
-    .button-container { text-align: center; margin: 30px 0; }
-    .button { background: #667eea; color: white; text-decoration: none; padding: 12px 30px; border-radius: 6px; display: inline-block; font-weight: 600; }
-    .button:hover { background: #764ba2; }
-    .footer { color: #666; font-size: 12px; margin-top: 30px; border-top: 1px solid #ddd; padding-top: 20px; }
-    .footer p { margin: 5px 0; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Tamamdır</h1>
-      <p style="margin: 10px 0 0 0; font-size: 14px; opacity: 0.9;">Verify your email address</p>
-    </div>
-    <div class="content">
-      <p class="greeting">Hi ${fullName},</p>
-      <p>Welcome to Tamamdır! To complete your registration, please verify your email address by clicking the button below.</p>
-      <div class="button-container">
-        <a href="${verifyUrl}" class="button">Verify Email</a>
-      </div>
-      <p style="color: #666; font-size: 14px;">Or copy this link: <br><code style="background: #e5e7eb; padding: 2px 4px; border-radius: 3px; word-break: break-all;">${verifyUrl}</code></p>
-      <p style="color: #666; font-size: 14px;">This link expires in 24 hours.</p>
-      <div class="footer">
-        <p>If you didn't create a Tamamdır account, you can safely ignore this email.</p>
-        <p>© 2026 Tamamdır. All rights reserved.</p>
-      </div>
-    </div>
-  </div>
-</body>
-</html>
-  `;
+  if (!apiKey) {
+    console.warn('[email] RESEND_API_KEY missing — email not sent');
+    return { success: false, skipped: true };
+  }
 
-  const textContent = `Verify your Tamamdır email
-
-Hi ${fullName},
-
-Welcome to Tamamdır! To complete your registration, please verify your email address by visiting this link:
-
-${verifyUrl}
-
-This link expires in 24 hours.
-
-If you didn't create a Tamamdır account, you can safely ignore this email.
-
-© 2026 Tamamdır. All rights reserved.
-  `;
-
-  try {
-    const response = await resend.emails.send({
-      from: EMAIL_FROM,
+  const res = await fetch(RESEND_API_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: getFromAddress(),
       to,
       subject,
-      html: htmlContent,
-      text: textContent,
-    });
-    return { success: true, id: response.data?.id };
-  } catch (error) {
-    console.error('Failed to send verification email:', error);
-    throw error;
+      html,
+      text,
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    console.error('[email] Resend API error:', data);
+    throw new Error(data.message || `Resend request failed (${res.status})`);
   }
+
+  return { success: true, id: data.id };
 }
 
 /**
- * Send password reset link
+ * Send 6-digit email verification code (Resend REST API via fetch).
  */
-async function sendPasswordResetEmail(to, fullName, resetUrl) {
-  const subject = 'Reset your Tamamdır password';
-
-  const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
-    .header h1 { margin: 0; font-size: 28px; }
-    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-    .greeting { font-size: 16px; margin-bottom: 20px; }
-    .button-container { text-align: center; margin: 30px 0; }
-    .button { background: #667eea; color: white; text-decoration: none; padding: 12px 30px; border-radius: 6px; display: inline-block; font-weight: 600; }
-    .button:hover { background: #764ba2; }
-    .warning { background: #fff3cd; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #ffc107; }
-    .footer { color: #666; font-size: 12px; margin-top: 30px; border-top: 1px solid #ddd; padding-top: 20px; }
-    .footer p { margin: 5px 0; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Tamamdır</h1>
-      <p style="margin: 10px 0 0 0; font-size: 14px; opacity: 0.9;">Reset your password</p>
+async function sendVerificationEmail(email, code) {
+  const subject = 'Tamamdır e-posta doğrulama kodu';
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px;">
+      <h2 style="color: #111;">Tamamdır</h2>
+      <p>E-posta adresinizi doğrulamak için doğrulama kodunuz:</p>
+      <p style="font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #16a34a;">${code}</p>
+      <p style="color: #666; font-size: 14px;">Bu kod 15 dakika geçerlidir. Bu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz.</p>
     </div>
-    <div class="content">
-      <p class="greeting">Hi ${fullName},</p>
-      <p>We received a request to reset your Tamamdır password. Click the button below to create a new password.</p>
-      <div class="button-container">
-        <a href="${resetUrl}" class="button">Reset Password</a>
-      </div>
-      <p style="color: #666; font-size: 14px;">Or copy this link: <br><code style="background: #e5e7eb; padding: 2px 4px; border-radius: 3px; word-break: break-all;">${resetUrl}</code></p>
-      <div class="warning">
-        <strong>Security note:</strong> This link expires in 1 hour and can only be used once. If you didn't request a password reset, please ignore this email or contact support.
-      </div>
-      <div class="footer">
-        <p>© 2026 Tamamdır. All rights reserved.</p>
-      </div>
-    </div>
-  </div>
-</body>
-</html>
   `;
+  const text = `Tamamdır e-posta doğrulama kodunuz: ${code}\n\nBu kod 15 dakika geçerlidir.`;
 
-  const textContent = `Reset your Tamamdır password
-
-Hi ${fullName},
-
-We received a request to reset your Tamamdır password. Visit this link to create a new password:
-
-${resetUrl}
-
-This link expires in 1 hour and can only be used once.
-
-If you didn't request a password reset, please ignore this email or contact support.
-
-© 2026 Tamamdır. All rights reserved.
-  `;
-
-  try {
-    const response = await resend.emails.send({
-      from: EMAIL_FROM,
-      to,
-      subject,
-      html: htmlContent,
-      text: textContent,
-    });
-    return { success: true, id: response.data?.id };
-  } catch (error) {
-    console.error('Failed to send password reset email:', error);
-    throw error;
+  if (!process.env.RESEND_API_KEY) {
+    console.log(`[email] DEV — verification code for ${email}: ${code}`);
+    return { success: true, dev: true };
   }
+
+  return sendViaResend({ to: email, subject, html, text });
+}
+
+/**
+ * Send 6-digit password reset code (Resend REST API via fetch).
+ */
+async function sendPasswordResetEmail(email, code) {
+  const subject = 'Tamamdır şifre sıfırlama kodu';
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px;">
+      <h2 style="color: #111;">Tamamdır</h2>
+      <p>Şifrenizi sıfırlamak için doğrulama kodunuz:</p>
+      <p style="font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #16a34a;">${code}</p>
+      <p style="color: #666; font-size: 14px;">Bu kod 15 dakika geçerlidir. Bu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz.</p>
+    </div>
+  `;
+  const text = `Tamamdır şifre sıfırlama kodunuz: ${code}\n\nBu kod 15 dakika geçerlidir.`;
+
+  if (!process.env.RESEND_API_KEY) {
+    console.log(`[email] DEV — password reset code for ${email}: ${code}`);
+    return { success: true, dev: true };
+  }
+
+  return sendViaResend({ to: email, subject, html, text });
 }
 
 module.exports = {

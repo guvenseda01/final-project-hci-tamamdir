@@ -1,4 +1,7 @@
 import { useNavigate } from "react-router-dom";
+import UserAvatar from "./UserAvatar";
+import ServiceImage from "./ServiceImage";
+import { usePreferences } from "../context/PreferencesContext";
 import type { Service } from "../data/types";
 
 interface ServiceCardProps {
@@ -7,6 +10,7 @@ interface ServiceCardProps {
 
 export default function ServiceCard({ service }: ServiceCardProps) {
   const navigate = useNavigate();
+  const { t } = usePreferences();
 
   return (
     <div
@@ -14,10 +18,11 @@ export default function ServiceCard({ service }: ServiceCardProps) {
       className="bg-surface-container-lowest rounded-xl shadow-card overflow-hidden border border-surface-variant/30 group active:scale-[0.98] transition-all duration-200 cursor-pointer"
     >
       <div className="relative h-48 w-full">
-        <img
+        <ServiceImage
           src={service.image}
+          serviceId={service.id}
           alt={service.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 bg-surface-container-low"
         />
         <div className="absolute top-3 right-3 bg-white/90 backdrop-blur px-3 py-1 rounded-full flex items-center gap-1 shadow-sm">
           <span className="material-symbols-outlined text-tertiary fill-icon text-sm">star</span>
@@ -26,7 +31,7 @@ export default function ServiceCard({ service }: ServiceCardProps) {
         </div>
         {service.providerVerified && (
           <div className="absolute bottom-3 left-3 bg-secondary-container text-on-secondary-container px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
-            Doğrulanmış
+            {t("service.verified")}
           </div>
         )}
       </div>
@@ -40,8 +45,10 @@ export default function ServiceCard({ service }: ServiceCardProps) {
         <p className="text-outline text-sm mb-4 line-clamp-1">{service.description}</p>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img
+            <UserAvatar
               src={service.providerAvatar}
+              userId={service.providerId}
+              name={service.providerName}
               alt={service.providerName}
               className="w-8 h-8 rounded-full border border-primary/20"
             />
@@ -57,7 +64,7 @@ export default function ServiceCard({ service }: ServiceCardProps) {
             }}
             className="bg-primary text-on-primary px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1 shadow-md active:bg-on-primary-fixed-variant transition-colors"
           >
-            Detay
+            {t("service.detail")}
             <span className="material-symbols-outlined text-sm">arrow_forward</span>
           </button>
         </div>

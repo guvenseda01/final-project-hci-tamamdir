@@ -214,6 +214,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const { run, get, all } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const { createNotification } = require('../utils/notifications');
 
 const VALID_TRANSITIONS = {
   pending:     ['accepted', 'cancelled'],
@@ -241,9 +242,9 @@ router.post(
         'SELECT id, provider_id, price, is_active FROM services WHERE id = ?',
         [service_id]
       );
-      if (!service || !service.is_active) return res.status(404).json({ error: 'Service not found' });
+      if (!service || !service.is_active) return res.status(404).json({ error: 'Hizmet bulunamadı' });
       if (service.provider_id === req.user.id) {
-        return res.status(400).json({ error: 'Cannot order your own service' });
+        return res.status(400).json({ error: 'Kendi hizmetinize sipariş veremezsiniz' });
       }
 
       const id = uuidv4();
@@ -257,12 +258,21 @@ router.post(
       await createNotification({
         user_id: service.provider_id,
         type:    'order_new',
-        title:   'New order received!',
-        body:    'Someone placed an order for your service.',
+        title:   'Yeni sipariş!',
+        body:    'Hizmetin için yeni bir sipariş geldi.',
         ref_id:  id,
       });
 
       const order = await getFullOrder(id);
+
+      await createNotification({
+        user_id: req.user.id,
+        type:    'order_placed',
+        title:   'Siparişin oluşturuldu',
+        body:    'Sağlayıcı onayladığında bilgilendirileceksin.',
+        ref_id:  id,
+      });
+
       return res.status(201).json(order);
     } catch (err) {
       next(err);
@@ -274,10 +284,18 @@ router.post(
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     const { role = 'buyer', status } = req.query;
-    const field = role === 'provider' ? 'o.provider_id' : 'o.buyer_id';
 
-    const where  = [`${field} = ?`];
-    const params = [req.user.id];
+    const where = [];
+    const params = [];
+
+    if (role === 'all') {
+      where.push('(o.buyer_id = ? OR o.provider_id = ?)');
+      params.push(req.user.id, req.user.id);
+    } else {
+      const field = role === 'provider' ? 'o.provider_id' : 'o.buyer_id';
+      where.push(`${field} = ?`);
+      params.push(req.user.id);
+    }
 
     if (status) {
       where.push('o.status = ?');
@@ -288,11 +306,13 @@ router.get('/', requireAuth, async (req, res, next) => {
       `SELECT o.*,
               s.title AS service_title,
               u_b.full_name AS buyer_name,    u_b.avatar_url AS buyer_avatar,
-              u_p.full_name AS provider_name, u_p.avatar_url AS provider_avatar
+              u_p.full_name AS provider_name, u_p.avatar_url AS provider_avatar,
+              rev.id AS review_id
        FROM orders o
        JOIN services s ON s.id = o.service_id
        JOIN users u_b  ON u_b.id = o.buyer_id
        JOIN users u_p  ON u_p.id = o.provider_id
+       LEFT JOIN reviews rev ON rev.order_id = o.id
        WHERE ${where.join(' AND ')}
        ORDER BY o.created_at DESC`,
       params
@@ -359,8 +379,8 @@ router.patch('/:id/complete', requireAuth, async (req, res, next) => {
     await createNotification({
       user_id: order.buyer_id,
       type:    'order_completed',
-      title:   'Your order is complete! 🎉',
-      body:    'Please leave a review for the service.',
+      title:   'Siparişin tamamlandı!',
+      body:    'Hizmet için yorum bırakabilirsin.',
       ref_id:  order.id,
     });
 
@@ -401,8 +421,8 @@ router.patch(
       await createNotification({
         user_id: other,
         type:    'order_cancelled',
-        title:   'An order was cancelled',
-        body:    req.body.reason || 'No reason provided.',
+        title:   'Sipariş iptal edildi',
+        body:    req.body.reason || 'Sipariş iptal edildi.',
         ref_id:  order.id,
       });
 
@@ -434,8 +454,8 @@ async function transitionOrder(req, res, next, newStatus, authCheck) {
     await createNotification({
       user_id: order.buyer_id,
       type:    `order_${newStatus}`,
-      title:   `Order ${newStatus}`,
-      body:    `Your order status changed to "${newStatus}".`,
+      title:   'Sipariş durumu güncellendi',
+      body:    `Siparişin "${newStatus === "accepted" ? "kabul edildi" : newStatus === "in_progress" ? "başlatıldı" : newStatus}" durumuna geçti.`,
       ref_id:  order.id,
     });
 
@@ -458,13 +478,6 @@ async function getFullOrder(id) {
      JOIN users u_p  ON u_p.id = o.provider_id
      WHERE o.id = ?`,
     [id]
-  );
-}
-
-async function createNotification({ user_id, type, title, body, ref_id }) {
-  await run(
-    'INSERT INTO notifications (id, user_id, type, title, body, ref_id) VALUES (?, ?, ?, ?, ?, ?)',
-    [uuidv4(), user_id, type, title, body || null, ref_id || null]
   );
 }
 

@@ -1,145 +1,300 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import TopBar from "../components/TopBar";
+import NotificationsDropdown from "../components/NotificationsDropdown";
+import ProfileMenuDropdown from "../components/ProfileMenuDropdown";
 import BottomNav from "../components/BottomNav";
+import Toast from "../components/Toast";
 import type { ServiceHistory } from "../data/types";
 import api from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { usePreferences } from "../context/PreferencesContext";
+import { mapOrder, ORDER_STATUS_LABEL, getOrderActions } from "../lib/orderMapper";
 
 type Tab = "requested" | "provided";
 
 export default function HistoryPage() {
   const { user } = useAuth();
+  const { t } = usePreferences();
   const [tab, setTab] = useState<Tab>("requested");
   const [history, setHistory] = useState<ServiceHistory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+
+  const loadHistory = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const data = await api.get("/api/orders?role=all");
+      const list = Array.isArray(data) ? data : [];
+      setHistory(list.map((o) => mapOrder(o as Record<string, unknown>, user.id)));
+    } catch {
+      setHistory([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
-    api.get('/api/orders')
-      .then((data: any) => {
-        const list = Array.isArray(data) ? data : [];
-        setHistory(list.map((o: any) => {
-          const isBuyer = o.buyer_id === user?.id;
-          return {
-            id: o.id,
-            serviceTitle: o.service_title ?? o.title ?? "Hizmet",
-            amount: `₺${o.amount ?? o.price ?? 0}`,
-            partnerName: isBuyer ? (o.provider_name ?? "") : (o.buyer_name ?? ""),
-            partnerAvatar: isBuyer ? (o.provider_avatar ?? "") : (o.buyer_avatar ?? ""),
-            status: (o.status === "completed" ? "completed" : o.status === "cancelled" ? "cancelled" : "pending") as ServiceHistory["status"],
-            date: o.created_at ? new Date(o.created_at).toLocaleDateString("tr-TR") : "",
-            type: (isBuyer ? "requested" : "provided") as ServiceHistory["type"],
-          };
-        }));
-      })
-      .catch(() => {});
-  }, [user?.id]);
+    loadHistory();
+  }, [loadHistory]);
+
+  async function submitReview(orderId: string) {
+    if (submittingReview) return;
+    setSubmittingReview(true);
+    try {
+      await api.post("/api/reviews", {
+        order_id: orderId,
+        rating: reviewRating,
+        comment: reviewComment.trim() || undefined,
+      });
+      setToastMessage(t("history.reviewSaved"));
+      setToastVisible(true);
+      setReviewingId(null);
+      setReviewComment("");
+      setReviewRating(5);
+      await loadHistory();
+    } catch (err: unknown) {
+      const msg = (err as { message?: string; data?: { error?: string } }).data?.error
+        ?? (err as { message?: string }).message
+        ?? t("history.reviewError");
+      setToastMessage(msg);
+      setToastVisible(true);
+    } finally {
+      setSubmittingReview(false);
+    }
+  }
+
+  async function cancelOrder(orderId: string) {
+    if (actionLoadingId) return;
+    const ok = window.confirm(t("history.cancelConfirm"));
+    if (!ok) return;
+    setActionLoadingId(orderId);
+    try {
+      await api.patch(`/api/orders/${orderId}/cancel`);
+      setToastMessage(t("history.cancelSuccess"));
+      setToastVisible(true);
+      await loadHistory();
+    } catch (err: unknown) {
+      const msg = (err as { data?: { error?: string }; message?: string }).data?.error
+        ?? (err as { message?: string }).message
+        ?? t("history.cancelError");
+      setToastMessage(msg);
+      setToastVisible(true);
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
 
   const filtered = history.filter((h) => h.type === tab);
   const totalCompleted = history.filter((h) => h.status === "completed").length;
-  const totalEarnings = history.filter((h) => h.type === "provided" && h.status === "completed")
-    .reduce((sum, h) => sum + parseInt(h.amount.replace(/\D/g, "")), 0);
+  const totalEarnings = history
+    .filter((h) => h.type === "provided" && h.status === "completed")
+    .reduce((sum, h) => sum + parseInt(h.amount.replace(/\D/g, ""), 10), 0);
 
   return (
     <div className="bg-background min-h-screen max-w-md mx-auto">
+      <Toast message={toastMessage} visible={toastVisible} onHide={() => setToastVisible(false)} />
+
       <TopBar
         rightContent={
-          <div className="flex gap-1">
-            <button className="p-2 rounded-full hover:bg-slate-50 transition-colors">
-              <span className="material-symbols-outlined text-slate-500">notifications</span>
-            </button>
-            <button className="p-2 rounded-full hover:bg-slate-50 transition-colors">
-              <span className="material-symbols-outlined text-slate-500">account_circle</span>
-            </button>
+          <div className="flex items-center gap-1">
+            <NotificationsDropdown />
+            <ProfileMenuDropdown />
           </div>
         }
       />
 
       <main className="pt-16 px-gutter pb-24 max-w-md mx-auto">
         <div className="mt-8 mb-6">
-          <h1 className="font-bold text-2xl text-on-surface">Hizmet Geçmişi</h1>
-          <p className="text-on-surface-variant text-sm">Tamamlanan kampüs görevlerinizi inceleyin</p>
+          <h1 className="font-bold text-2xl text-on-surface">{t("history.title")}</h1>
+          <p className="text-on-surface-variant text-sm">{t("history.sub")}</p>
         </div>
 
-        {/* Summary Cards */}
         <div className="grid grid-cols-2 gap-sm mb-lg">
           <div className="bg-white p-md rounded-xl shadow-card border border-slate-50">
             <div className="flex items-center gap-base mb-xs">
               <span className="material-symbols-outlined text-primary text-xl">assignment_turned_in</span>
-              <span className="text-xs text-on-surface-variant">Tamamlanan</span>
+              <span className="text-xs text-on-surface-variant">{t("history.completed")}</span>
             </div>
             <p className="font-bold text-2xl text-on-surface">{totalCompleted}</p>
-            <p className="text-primary font-bold text-[10px]">Geçmiş hizmetler</p>
+            <p className="text-primary font-bold text-[10px]">{t("history.pastServices")}</p>
           </div>
           <div className="bg-white p-md rounded-xl shadow-card border border-slate-50">
             <div className="flex items-center gap-base mb-xs">
               <span className="material-symbols-outlined text-tertiary text-xl">payments</span>
-              <span className="text-xs text-on-surface-variant">Toplam Kazanç</span>
+              <span className="text-xs text-on-surface-variant">{t("history.earnings")}</span>
             </div>
             <p className="font-bold text-2xl text-on-surface">₺{totalEarnings.toLocaleString("tr-TR")}</p>
-            <p className="text-tertiary font-bold text-[10px]">İlk %5 Öğrenci</p>
+            <p className="text-tertiary font-bold text-[10px]">{t("history.myProvided")}</p>
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="sticky top-16 bg-background/80 backdrop-blur-md z-40 py-sm">
           <div className="relative flex bg-surface-container rounded-full p-1">
             <div
               className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white rounded-full shadow-sm transition-transform duration-300"
               style={{ transform: tab === "provided" ? "translateX(100%)" : "translateX(0)" }}
             />
-            {(["requested", "provided"] as Tab[]).map((t) => (
+            {(["requested", "provided"] as Tab[]).map((tabKey) => (
               <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`flex-1 py-3 text-center z-10 font-bold text-sm transition-colors ${tab === t ? "text-primary" : "text-on-surface-variant"}`}
+                key={tabKey}
+                onClick={() => setTab(tabKey)}
+                className={`flex-1 py-3 text-center z-10 font-bold text-sm transition-colors ${tab === tabKey ? "text-primary" : "text-on-surface-variant"}`}
               >
-                {t === "requested" ? "Talep Ettim" : "Sağladım"}
+                {tabKey === "requested" ? t("history.requested") : t("history.provided")}
               </button>
             ))}
           </div>
         </div>
 
-        {/* List */}
         <div className="mt-sm space-y-gutter">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="text-center py-16">
               <span className="material-symbols-outlined text-5xl text-outline-variant mb-2">history</span>
-              <p className="text-on-surface-variant">Henüz kayıt yok.</p>
+              <p className="text-on-surface-variant">{t("history.empty")}</p>
             </div>
           ) : (
-            filtered.map((item) => (
-              <div
-                key={item.id}
-                className="bg-white rounded-2xl overflow-hidden shadow-card transition-all active:scale-[0.98]"
-              >
-                <div className="p-md flex gap-gutter">
-                  <div className="relative h-16 w-16 rounded-xl overflow-hidden flex-shrink-0">
-                    <img
-                      src={item.partnerAvatar}
-                      alt={item.partnerName}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start">
-                      <h3 className="font-bold text-base text-on-surface">{item.serviceTitle}</h3>
-                      <span className="font-bold text-sm text-on-surface flex-shrink-0 ml-2">{item.amount}</span>
+            filtered.map((item) => {
+              const statusInfo = ORDER_STATUS_LABEL[item.status];
+              const canReview = item.type === "requested" && item.status === "completed" && !item.hasReview;
+              const isReviewOpen = reviewingId === item.id;
+              const canCancel = getOrderActions(item).some((a) => a.action === "cancel");
+              const isActionLoading = actionLoadingId === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  className="bg-white rounded-2xl overflow-hidden shadow-card border border-slate-50"
+                >
+                  <div className="p-md flex gap-gutter">
+                    <div className="relative h-16 w-16 rounded-xl overflow-hidden flex-shrink-0 bg-surface-container">
+                      {item.partnerAvatar ? (
+                        <img src={item.partnerAvatar} alt={item.partnerName} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <span className="material-symbols-outlined text-outline-variant">person</span>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-xs text-on-surface-variant mb-xs mt-0.5">
-                      {item.type === "requested" ? "Sağlayan" : "Müşteri"}: {item.partnerName}
-                    </p>
-                    <div className="flex items-center gap-xs">
-                      <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <span className="material-symbols-outlined fill-icon text-xs">check_circle</span>
-                        TAMAMLANDI
-                      </span>
-                      <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wide">
-                        {item.date}
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start gap-2">
+                        <h3 className="font-bold text-base text-on-surface">{item.serviceTitle}</h3>
+                        <span className="font-bold text-sm text-on-surface flex-shrink-0">{item.amount}</span>
+                      </div>
+                      <p className="text-xs text-on-surface-variant mb-xs mt-0.5">
+                        {item.type === "requested" ? t("history.provider") : t("history.customer")}: {item.partnerName}
+                      </p>
+                      {item.note && (
+                        <p className="text-xs text-on-surface-variant mb-xs line-clamp-2 italic">
+                          &ldquo;{item.note}&rdquo;
+                        </p>
+                      )}
+                      <div className="flex items-center gap-xs flex-wrap">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${statusInfo.className}`}>
+                          {item.status === "completed" && (
+                            <span className="material-symbols-outlined fill-icon text-xs">check_circle</span>
+                          )}
+                          {statusInfo.text}
+                        </span>
+                        <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wide">
+                          {item.date}
+                        </span>
+                        {item.hasReview && (
+                          <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                            {t("history.reviewed")}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
+
+                  {canCancel && (
+                    <div className="px-md pb-md">
+                      <button
+                        type="button"
+                        disabled={isActionLoading}
+                        onClick={() => cancelOrder(item.id)}
+                        className="w-full py-2.5 rounded-xl border border-error/30 text-error font-bold text-sm disabled:opacity-60"
+                      >
+                        {isActionLoading ? "..." : t("history.cancel")}
+                      </button>
+                    </div>
+                  )}
+
+                  {canReview && !isReviewOpen && (
+                    <div className="px-md pb-md">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReviewingId(item.id);
+                          setReviewRating(5);
+                          setReviewComment("");
+                        }}
+                        className="w-full py-2.5 rounded-xl border-2 border-primary/20 text-primary font-bold text-sm active:bg-primary/5"
+                      >
+                        {t("history.review")}
+                      </button>
+                    </div>
+                  )}
+
+                  {isReviewOpen && (
+                    <div className="px-md pb-md border-t border-slate-100 pt-md space-y-3">
+                      <p className="font-bold text-sm text-on-surface">{t("history.reviewFormTitle")}</p>
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setReviewRating(star)}
+                            className="p-1 active:scale-90 transition-transform"
+                          >
+                            <span
+                              className={`material-symbols-outlined text-2xl text-tertiary ${star <= reviewRating ? "fill-icon" : ""}`}
+                            >
+                              star
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      <textarea
+                        value={reviewComment}
+                        onChange={(e) => setReviewComment(e.target.value)}
+                        placeholder={t("history.reviewPlaceholder")}
+                        rows={3}
+                        className="w-full p-3 rounded-xl border border-outline-variant/30 text-sm resize-none outline-none focus:border-primary"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setReviewingId(null)}
+                          className="flex-1 py-2.5 rounded-xl border border-outline-variant/30 font-bold text-sm text-on-surface-variant"
+                        >
+                          {t("history.cancelReview")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => submitReview(item.id)}
+                          disabled={submittingReview}
+                          className="flex-1 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-sm disabled:opacity-60"
+                        >
+                          {submittingReview ? t("history.saving") : t("history.submitReview")}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </main>

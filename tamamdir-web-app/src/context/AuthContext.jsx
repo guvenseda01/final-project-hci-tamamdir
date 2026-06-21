@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import api from '../lib/api'
+import { disconnectSocket } from '../lib/socket'
 
 const AuthContext = createContext(null)
 
@@ -23,24 +24,33 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     const data = await api.post('/api/auth/login', { email, password })
     localStorage.setItem('token', data.token)
-    setUser(data.user)
-    return data
+    const user = await me()
+    return { ...data, user }
   }
 
   async function register(full_name, email, password) {
-    const data = await api.post('/api/auth/register', { full_name, email, password })
+    return api.post('/api/auth/register', { full_name, email, password })
+  }
+
+  async function verifyEmail(email, code) {
+    const data = await api.post('/api/auth/verify-email', { email, code })
     localStorage.setItem('token', data.token)
-    setUser(data.user)
-    return data
+    const user = await me()
+    return { ...data, user }
+  }
+
+  async function resendVerification(email) {
+    return api.post('/api/auth/resend-verification', { email })
   }
 
   function logout() {
+    disconnectSocket()
     localStorage.removeItem('token')
     setUser(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, me }}>
+    <AuthContext.Provider value={{ user, loading, login, register, verifyEmail, resendVerification, logout, me }}>
       {children}
     </AuthContext.Provider>
   )

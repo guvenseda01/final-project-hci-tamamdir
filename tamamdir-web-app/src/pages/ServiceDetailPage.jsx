@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { Star, CheckCircle2, Clock, ArrowLeft, ChevronRight, AlertCircle, Loader2 } from 'lucide-react'
-import Navbar from '../components/Navbar'
+import { Star, CheckCircle2, Clock, ArrowLeft, ChevronRight, AlertCircle, Loader2, MessageCircle, MapPin, Flag } from 'lucide-react'
 import ServiceCard from '../components/ServiceCard'
+import ServiceImageGallery from '../components/ServiceImageGallery'
+import ReportModal from '../components/ReportModal'
+import FavoriteButton from '../components/FavoriteButton'
 import api from '../lib/api'
-import { formatPrice, formatDelivery } from '../lib/utils'
+import { resolveMediaUrl } from '../lib/utils'
+import { formatLocalizedPrice, formatLocalizedDelivery, tLocation, tCategory } from '../lib/i18n'
+import { useAuth } from '../context/AuthContext'
+import { usePreferences } from '../context/PreferencesContext'
 
 function DetailSkeleton() {
   return (
@@ -26,12 +31,15 @@ function DetailSkeleton() {
 export default function ServiceDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const { t } = usePreferences()
 
   const [service, setService] = useState(null)
   const [reviews, setReviews] = useState([])
   const [moreServices, setMoreServices] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showReportModal, setShowReportModal] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -54,7 +62,7 @@ export default function ServiceDetailPage() {
           .catch(() => {})
       })
       .catch(err => {
-        if (!cancelled) setError(err.status === 404 ? 'Service not found.' : (err.message || 'Failed to load service.'))
+        if (!cancelled) setError(err.status === 404 ? t('serviceDetail.notFound') : (err.message || t('serviceDetail.loadFailed')))
       })
       .finally(() => { if (!cancelled) setLoading(false) })
 
@@ -62,22 +70,79 @@ export default function ServiceDetailPage() {
   }, [id])
 
   const handleSendMessage = async () => {
+    if (!service) return
+    const serviceQuery = `service=${id}`
+
+    // Provider viewing own service — cannot message self; open messages with service context
+    if (user?.id === service.provider_id) {
+      try {
+        const [convs, orders] = await Promise.all([
+          api.get('/api/messages/conversations'),
+          api.get('/api/orders?role=provider&status=pending').catch(() => []),
+        ])
+        const serviceOrder = orders.find(o => o.service_id === id)
+        if (serviceOrder) {
+          const existing = convs.find(
+            c => c.service_id === id && c.other_id === serviceOrder.buyer_id
+          )
+          if (existing) {
+            navigate(`/messages?conv=${existing.id}&${serviceQuery}`)
+            return
+          }
+          const conv = await api.post('/api/messages/conversations', {
+            recipient_id: serviceOrder.buyer_id,
+            service_id: id,
+          })
+          navigate(`/messages?conv=${conv.id}&${serviceQuery}`)
+          return
+        }
+        const existingForService = convs.find(c => c.service_id === id)
+        if (existingForService) {
+          navigate(`/messages?conv=${existingForService.id}&${serviceQuery}`)
+          return
+        }
+        if (convs.length === 1) {
+          const conv = await api.post('/api/messages/conversations', {
+            recipient_id: convs[0].other_id,
+            service_id: id,
+          })
+          navigate(`/messages?conv=${conv.id}&${serviceQuery}`)
+          return
+        }
+        navigate(`/messages?${serviceQuery}`)
+      } catch {
+        navigate(`/messages?${serviceQuery}`)
+      }
+      return
+    }
+
     try {
-      const conv = await api.post('/api/messages/conversations', { recipient_id: service.provider_id })
-      navigate(`/messages?conv=${conv.id}`)
+      const convs = await api.get('/api/messages/conversations')
+      const existing = convs.find(
+        c => c.service_id === id && c.other_id === service.provider_id
+      )
+      if (existing) {
+        navigate(`/messages?conv=${existing.id}&${serviceQuery}`)
+        return
+      }
+
+      const conv = await api.post('/api/messages/conversations', {
+        recipient_id: service.provider_id,
+        service_id: id,
+      })
+      navigate(`/messages?conv=${conv.id}&${serviceQuery}`)
     } catch {
-      navigate('/messages')
+      navigate(`/messages?${serviceQuery}`)
     }
   }
 
-  const coverImage = service?.images?.find(i => i.is_cover)?.image_url
-    ?? service?.images?.[0]?.image_url
-    ?? null
+  const isOwnService = user?.id === service?.provider_id
+
+  const galleryImages = service?.images ?? []
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white">
-        <Navbar />
+      <div className="min-h-screen bg-amber-50">
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           <DetailSkeleton />
         </main>
@@ -87,14 +152,13 @@ export default function ServiceDetailPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-white">
-        <Navbar />
+      <div className="min-h-screen bg-amber-50">
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-20 text-center">
           <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
           <p className="text-gray-700 font-semibold text-lg mb-2">{error}</p>
           <button onClick={() => navigate('/services')} className="btn-primary mt-4">
             <ArrowLeft className="w-4 h-4" />
-            Back to Services
+            {t('serviceDetail.backToServices')}
           </button>
         </main>
       </div>
@@ -102,15 +166,13 @@ export default function ServiceDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <Navbar />
-
+    <div className="min-h-screen bg-amber-50">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-gray-400 mb-6">
-          <Link to="/home" className="hover:text-gray-600">Home</Link>
+          <Link to="/home" className="hover:text-gray-600">{t('common.home')}</Link>
           <ChevronRight className="w-4 h-4" />
-          <Link to="/services" className="hover:text-gray-600">Services</Link>
+          <Link to="/services" className="hover:text-gray-600">{t('common.services')}</Link>
           <ChevronRight className="w-4 h-4" />
           <span className="text-gray-700 font-medium">{service.title}</span>
         </nav>
@@ -118,27 +180,40 @@ export default function ServiceDetailPage() {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Left — main content */}
           <div className="lg:col-span-2">
-            <div className="rounded-2xl overflow-hidden mb-6 shadow-sm border border-gray-100 bg-gray-100 h-80">
-              {coverImage ? (
-                <img src={coverImage} alt={service.title} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-green-400 to-teal-500" />
-              )}
-            </div>
+            <ServiceImageGallery serviceId={service.id} images={galleryImages} title={service.title} />
 
             {/* Category tag */}
             <div className="flex flex-wrap gap-2 mb-4">
               <span className="text-xs font-medium bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
-                {service.category_name}
+                {tCategory(t, { slug: service.category_slug, name: service.category_name })}
+              </span>
+              <span className="inline-flex items-center gap-1 text-xs font-medium bg-amber-100 text-coffee px-3 py-1 rounded-full border border-amber-200">
+                <MapPin className="w-3 h-3" />
+                {tLocation(t, service.location_type)}
               </span>
               {service.provider_verified === 1 && (
                 <span className="text-xs font-medium bg-green-pale text-green-primary px-3 py-1 rounded-full">
-                  Verified Provider
+                  {t('serviceDetail.verifiedProvider')}
                 </span>
               )}
             </div>
 
-            <h1 className="text-3xl font-bold text-gray-900 mb-3">{service.title}</h1>
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <h1 className="text-3xl font-bold text-coffee">{service.title}</h1>
+              <div className="flex items-center gap-2 shrink-0 mt-1">
+                {!isOwnService && <FavoriteButton serviceId={service.id} />}
+                {!isOwnService && (
+                  <button
+                    type="button"
+                    onClick={() => setShowReportModal(true)}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-red-600"
+                  >
+                    <Flag className="w-4 h-4" />
+                    {t('common.report')}
+                  </button>
+                )}
+              </div>
+            </div>
 
             <div className="flex items-center gap-4 mb-6">
               {service.review_count > 0 ? (
@@ -156,37 +231,37 @@ export default function ServiceDetailPage() {
                   <span className="text-sm font-semibold text-gray-700 ml-1">
                     {Number(service.rating).toFixed(1)}
                   </span>
-                  <span className="text-sm text-gray-400">({service.review_count} reviews)</span>
+                  <span className="text-sm text-gray-400">({t('serviceDetail.reviews', { count: service.review_count })})</span>
                 </div>
               ) : (
-                <span className="text-sm text-gray-400">No reviews yet</span>
+                <span className="text-sm text-gray-400">{t('serviceDetail.noReviewsYet')}</span>
               )}
               <span className="text-gray-300">•</span>
               <div className="flex items-center gap-1.5 text-sm text-green-primary">
                 <span className="w-2 h-2 bg-green-primary rounded-full animate-pulse" />
-                Active
+                {t('common.active')}
               </div>
             </div>
 
             <div className="mb-8">
-              <h2 className="text-lg font-semibold text-gray-900 mb-3">Description</h2>
+              <h2 className="text-lg font-semibold text-coffee mb-3">{t('serviceDetail.description')}</h2>
               <p className="text-gray-600 leading-relaxed whitespace-pre-line">{service.description}</p>
             </div>
 
             {/* Reviews */}
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Reviews {reviews.length > 0 && <span className="text-gray-400 font-normal text-base">({reviews.length})</span>}
+              <h2 className="text-lg font-semibold text-coffee mb-4">
+                {t('serviceDetail.reviewsTitle')} {reviews.length > 0 && <span className="text-coffee/60 font-normal text-base">({reviews.length})</span>}
               </h2>
               {reviews.length === 0 ? (
-                <p className="text-gray-400 text-sm">No reviews yet — be the first!</p>
+                <p className="text-gray-400 text-sm">{t('serviceDetail.beFirstReview')}</p>
               ) : (
                 <div className="space-y-4">
                   {reviews.map(review => (
                     <div key={review.id} className="flex gap-4">
                       {review.reviewer_avatar ? (
                         <img
-                          src={review.reviewer_avatar}
+                          src={resolveMediaUrl(review.reviewer_avatar)}
                           alt={review.reviewer_name}
                           className="w-10 h-10 rounded-full object-cover shrink-0 border border-gray-100"
                         />
@@ -199,7 +274,7 @@ export default function ServiceDetailPage() {
                       )}
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-sm text-gray-900">{review.reviewer_name}</span>
+                          <span className="font-semibold text-sm text-coffee">{review.reviewer_name}</span>
                           <div className="flex items-center gap-0.5">
                             {[...Array(review.rating)].map((_, i) => (
                               <Star key={i} className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
@@ -222,9 +297,9 @@ export default function ServiceDetailPage() {
             <div className="sticky top-24 card p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-400 mb-0.5">Starting from</p>
-                  <p className="text-4xl font-bold text-gray-900">
-                    {formatPrice(service.price, service.price_unit)}
+                  <p className="text-xs text-gray-400 mb-0.5">{t('serviceDetail.startingFrom')}</p>
+                  <p className="text-4xl font-bold text-coffee">
+                    {formatLocalizedPrice(t, service.price, service.price_unit)}
                   </p>
                 </div>
                 <div className="w-10 h-10 bg-green-pale rounded-xl flex items-center justify-center">
@@ -236,19 +311,23 @@ export default function ServiceDetailPage() {
                 onClick={handleSendMessage}
                 className="btn-primary w-full justify-center py-3.5 text-base"
               >
-                <CheckCircle2 className="w-5 h-5" />
-                Send Message
+                {isOwnService ? (
+                  <MessageCircle className="w-5 h-5" />
+                ) : (
+                  <CheckCircle2 className="w-5 h-5" />
+                )}
+                {isOwnService ? t('serviceDetail.viewMessages') : t('serviceDetail.sendMessage')}
               </button>
-              <p className="text-xs text-gray-400 text-center -mt-2">Request takes less than 1 minute</p>
+              <p className="text-xs text-gray-400 text-center -mt-2">{t('serviceDetail.requestTime')}</p>
 
               <div className="space-y-3 pt-2">
                 <div className="flex items-center gap-3 text-sm text-gray-600">
                   <Clock className="w-4 h-4 text-green-primary shrink-0" />
-                  {formatDelivery(service.delivery_days)}
+                  {formatLocalizedDelivery(t, service.delivery_days)}
                 </div>
                 <div className="flex items-center gap-3 text-sm text-gray-600">
                   <CheckCircle2 className="w-4 h-4 text-green-primary shrink-0" />
-                  Tamamdır Guarantee
+                  {t('serviceDetail.guarantee')}
                 </div>
               </div>
 
@@ -257,7 +336,7 @@ export default function ServiceDetailPage() {
                   <div className="relative">
                     {service.provider_avatar ? (
                       <img
-                        src={service.provider_avatar}
+                        src={resolveMediaUrl(service.provider_avatar)}
                         alt={service.provider_name}
                         className="w-11 h-11 rounded-full object-cover border-2 border-white shadow-sm"
                       />
@@ -275,35 +354,34 @@ export default function ServiceDetailPage() {
                     )}
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900 text-sm">{service.provider_name}</p>
+                    <p className="font-semibold text-coffee text-sm">{service.provider_name}</p>
                     <div className="flex items-center gap-2 mt-0.5">
                       {service.provider_department && (
                         <span className="text-xs text-gray-400">{service.provider_department}</span>
                       )}
                       {service.provider_verified === 1 && (
                         <span className="text-xs bg-green-pale text-green-primary font-semibold px-2 py-0.5 rounded-full">
-                          VERIFIED
+                          {t('common.verified').toUpperCase()}
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="bg-gray-50 rounded-xl p-3 text-center">
-                    <p className="text-lg font-bold text-gray-900">{service.order_count}</p>
-                    <p className="text-xs text-gray-400">Orders Done</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-xl p-3 text-center">
-                    <p className="text-lg font-bold text-gray-900">
-                      {service.review_count > 0 ? `${Number(service.provider_rating).toFixed(1)}★` : '—'}
-                    </p>
-                    <p className="text-xs text-gray-400">Provider Rating</p>
-                  </div>
+                <div className="bg-gray-50 rounded-xl p-3 text-center mb-4">
+                  <p className="text-lg font-bold text-coffee">
+                    {Number(service.provider_rating ?? 0).toFixed(1)}★
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {t('serviceDetail.providerRating')}
+                    {(service.provider_review_count ?? 0) > 0 && (
+                      <span className="text-gray-400"> · {t('serviceDetail.providerReviews', { count: service.provider_review_count })}</span>
+                    )}
+                  </p>
                 </div>
 
-                <Link to={`/profile`} className="btn-outline w-full justify-center text-sm py-2.5">
-                  View Profile
+                <Link to={`/users/${service.provider_id}`} className="btn-outline text-coffee w-full justify-center text-sm py-2.5">
+                  {t('serviceDetail.viewProfile')}
                 </Link>
               </div>
             </div>
@@ -313,8 +391,8 @@ export default function ServiceDetailPage() {
         {/* More from provider */}
         {moreServices.length > 0 && (
           <section className="mt-14">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">
-              More from {service.provider_name?.split(' ')[0]}
+            <h2 className="text-xl font-bold text-coffee mb-6">
+              {t('serviceDetail.moreFrom', { name: service.provider_name?.split(' ')[0] })}
             </h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {moreServices.map(s => (
@@ -332,6 +410,14 @@ export default function ServiceDetailPage() {
           </section>
         )}
       </main>
+
+      <ReportModal
+        open={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        targetType="service"
+        targetId={service?.id}
+        targetLabel={service?.title}
+      />
     </div>
   )
 }

@@ -1,17 +1,106 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { CheckCircle2, Send, Image, Plus, MoreVertical, Loader2 } from 'lucide-react'
-import { cn } from '../lib/utils'
-import Navbar from '../components/Navbar'
+import { useSearchParams, Link } from 'react-router-dom'
+import { Send, Image, Plus, MoreVertical, Loader2, CheckCircle2, Ban, Flag, AlertCircle } from 'lucide-react'
+import { cn, resolveMediaUrl } from '../lib/utils'
+import TamamdirLogo from '../components/TamamdirLogo'
 import api from '../lib/api'
+import { getSocket, joinConversation, leaveConversation, disconnectSocket } from '../lib/socket'
+import LeaveFeedbackModal from '../components/LeaveFeedbackModal'
+import FeedbackThanksPopup from '../components/FeedbackThanksPopup'
+import ReportModal from '../components/ReportModal'
 import { useAuth } from '../context/AuthContext'
+import { usePreferences } from '../context/PreferencesContext'
+import { formatLocalizedPrice } from '../lib/i18n'
 
 function formatMsgTime(dateStr) {
   if (!dateStr) return ''
   return new Date(dateStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
-function formatConvTime(dateStr) {
+function formatBanUntil(dateStr) {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+const chatPanelHeaderClass = 'px-5 py-5 border-b border-amber-200 bg-amber-100'
+const coffeeText = 'text-coffee'
+
+function isServiceLive(service) {
+  return service && service.is_active !== 0 && service.is_active !== false
+}
+
+function mergeTamamdirStatus(prev, payload, userId, otherId) {
+  const ids = payload.confirmed_user_ids ?? []
+  const bothConfirmed = payload.both_confirmed ?? false
+  const orderId = bothConfirmed ? (payload.order_id ?? null) : null
+  const myReviewSubmitted = bothConfirmed ? (payload.my_review_submitted ?? false) : false
+
+  return {
+    service_id: payload.service_id ?? prev?.service_id,
+    service_title: payload.service_title ?? prev?.service_title,
+    my_confirmed: payload.my_confirmed ?? ids.includes(userId),
+    other_confirmed: payload.other_confirmed ?? (otherId ? ids.includes(otherId) : ids.length >= 2),
+    both_confirmed: bothConfirmed,
+    order_id: orderId,
+    order_status: bothConfirmed ? (payload.order_status ?? prev?.order_status ?? null) : null,
+    cancel_count: payload.cancel_count ?? prev?.cancel_count ?? 0,
+    customer_cancel_count: payload.customer_cancel_count ?? prev?.customer_cancel_count ?? 0,
+    provider_cancel_count: payload.provider_cancel_count ?? prev?.provider_cancel_count ?? 0,
+    cancel_limit: payload.cancel_limit ?? 2,
+    is_customer: payload.is_customer ?? prev?.is_customer,
+    my_cancel_count: payload.my_cancel_count ?? prev?.my_cancel_count ?? 0,
+    my_cancels_remaining: payload.my_cancels_remaining ?? prev?.my_cancels_remaining,
+    will_be_banned_if_cancel: payload.will_be_banned_if_cancel ?? false,
+    is_banned: payload.is_banned ?? false,
+    banned_until: payload.banned_until ?? null,
+    banned_user_id: payload.banned_user_id ?? null,
+    i_am_banned: payload.i_am_banned ?? false,
+    can_unban: payload.can_unban ?? false,
+    buyer_id: payload.buyer_id ?? prev?.buyer_id,
+    provider_id: payload.provider_id ?? prev?.provider_id,
+    my_review_submitted: myReviewSubmitted,
+    other_review_submitted: bothConfirmed
+      ? (payload.other_review_submitted ?? prev?.other_review_submitted ?? false)
+      : false,
+    can_leave_review: bothConfirmed && orderId && !myReviewSubmitted,
+    both_reviews_submitted: payload.both_reviews_submitted ?? false,
+    my_existing_review: payload.my_existing_review ?? null,
+  }
+}
+
+function needsFeedbackPrompt(status) {
+  return status?.both_confirmed && status?.order_id && !status?.my_review_submitted
+}
+
+function getCancelModalCopy(tamamdirStatus, t) {
+  if (!tamamdirStatus?.is_customer) {
+    return {
+      body: t('messages.cancelBody'),
+      note: t('messages.cancelProviderNote'),
+    }
+  }
+
+  const used = tamamdirStatus.customer_cancel_count ?? 0
+  const limit = tamamdirStatus.cancel_limit ?? 2
+
+  if (tamamdirStatus.will_be_banned_if_cancel) {
+    return {
+      body: t('messages.cancelBody'),
+      note: t('messages.cancelFinalBan', { limit, used }),
+    }
+  }
+
+  const leftAfter = Math.max(0, (tamamdirStatus.my_cancels_remaining ?? limit - used) - 1)
+  return {
+    body: t('messages.cancelBody'),
+    note: t('messages.cancelRemaining', { limit, used, left: leftAfter }),
+  }
+}
+function formatConvTime(dateStr, t) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   const now = new Date()
@@ -20,80 +109,407 @@ function formatConvTime(dateStr) {
   }
   const yesterday = new Date(now)
   yesterday.setDate(now.getDate() - 1)
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+  if (d.toDateString() === yesterday.toDateString()) return t('common.yesterday')
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 }
 
 export default function MessagesPage() {
   const { user } = useAuth()
-  const [searchParams] = useSearchParams()
+  const { t } = usePreferences()
+  const [searchParams, setSearchParams] = useSearchParams()
   const requestedConvId = searchParams.get('conv')
+  const requestedServiceId = searchParams.get('service')
 
   const [convs, setConvs] = useState([])
   const [activeConv, setActiveConv] = useState(null)
+  const [activeServiceId, setActiveServiceId] = useState(null)
+  const [activeService, setActiveService] = useState(null)
   const [messages, setMessages] = useState([])
   const [message, setMessage] = useState('')
-  const [pendingOrder, setPendingOrder] = useState(null)
-  const [tamamdirDone, setTamamdirDone] = useState(false)
+  const [tamamdirStatus, setTamamdirStatus] = useState(null)
   const [loadingConvs, setLoadingConvs] = useState(true)
   const [loadingMsgs, setLoadingMsgs] = useState(false)
   const [sending, setSending] = useState(false)
-  const [accepting, setAccepting] = useState(false)
+  const [tamamdirSubmitting, setTamamdirSubmitting] = useState(false)
+  const [cancelSubmitting, setCancelSubmitting] = useState(false)
+  const [unbanSubmitting, setUnbanSubmitting] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false)
+  const [showFeedbackThanks, setShowFeedbackThanks] = useState(false)
+  const [showChatMenu, setShowChatMenu] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [isUserBlocked, setIsUserBlocked] = useState(false)
+  const [blockBusy, setBlockBusy] = useState(false)
+  const [roleFilter, setRoleFilter] = useState('all')
+
+  useEffect(() => {
+    setShowChatMenu(false)
+    setShowReportModal(false)
+  }, [activeConv?.id])
   const messagesEndRef = useRef(null)
+  const activeConvIdRef = useRef(null)
+  const prevConvIdRef = useRef(null)
+  const activeServiceIdRef = useRef(null)
+  const activeConvRef = useRef(null)
+  const initialUrlHandledRef = useRef(false)
+
+  activeConvIdRef.current = activeConv?.id ?? null
+  activeServiceIdRef.current = activeServiceId
+  activeConvRef.current = activeConv
 
   // Auto-scroll when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const selectConv = useCallback(async (conv) => {
+  const fetchTamamdirStatus = useCallback(async (convId, serviceId, otherId) => {
+    if (!convId || !serviceId) {
+      setTamamdirStatus(null)
+      return
+    }
+    try {
+      const status = await api.get(
+        `/api/messages/conversations/${convId}/tamamdir?service_id=${serviceId}`
+      )
+      setTamamdirStatus(prev =>
+        mergeTamamdirStatus(prev, status, user?.id, otherId ?? activeConvRef.current?.other_id)
+      )
+    } catch {
+      setTamamdirStatus(null)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!activeConv?.other_id) {
+      setIsUserBlocked(false)
+      return
+    }
+    api.get(`/api/users/${activeConv.other_id}/block-status`)
+      .then(data => setIsUserBlocked(!!data.blocked))
+      .catch(() => setIsUserBlocked(false))
+  }, [activeConv?.other_id])
+
+  const toggleBlockUser = async () => {
+    if (!activeConv?.other_id || blockBusy) return
+    setBlockBusy(true)
+    try {
+      if (isUserBlocked) {
+        await api.del(`/api/users/${activeConv.other_id}/block`)
+        setIsUserBlocked(false)
+      } else {
+        await api.post(`/api/users/${activeConv.other_id}/block`)
+        setIsUserBlocked(true)
+        setConvs(prev => prev.filter(c => c.id !== activeConv.id))
+        setActiveConv(null)
+        setMessages([])
+        setTamamdirStatus(null)
+      }
+      setShowChatMenu(false)
+    } catch {
+      // ignore
+    } finally {
+      setBlockBusy(false)
+    }
+  }
+
+  const fetchAllConversations = useCallback(async () => {
+    return api.get('/api/messages/conversations')
+  }, [])
+
+  const filterConversationsByRole = useCallback((list, role) => {
+    if (!role || role === 'all') return list
+    return list.filter(c => c.my_role === role)
+  }, [])
+
+  const openConversationForService = useCallback(async (serviceId, knownConvs = []) => {
+    const existing = knownConvs.find(c => c.service_id === serviceId)
+    if (existing) return existing
+
+    const service = await api.get(`/api/services/${serviceId}`)
+    if (!service) return null
+
+    if (service.provider_id === user?.id) {
+      const all = knownConvs.length ? knownConvs : await fetchAllConversations()
+      return all.find(c => c.service_id === serviceId) ?? null
+    }
+
+    return api.post('/api/messages/conversations', {
+      recipient_id: service.provider_id,
+      service_id: serviceId,
+    })
+  }, [user?.id, fetchAllConversations])
+
+  const selectConv = useCallback(async (conv, serviceIdOverride) => {
+    const convId = conv.id
+    activeConvIdRef.current = convId
     setActiveConv(conv)
     setMessages([])
-    setTamamdirDone(false)
-    setPendingOrder(null)
+    setTamamdirStatus(null)
+    setShowCancelConfirm(false)
+    setShowFeedbackModal(false)
+    setShowFeedbackThanks(false)
+    setActiveService(null)
+
+    const serviceId = conv.service_id ?? serviceIdOverride ?? null
+    setActiveServiceId(serviceId)
+    activeServiceIdRef.current = serviceId
     setLoadingMsgs(true)
 
     try {
-      const [msgs, orders] = await Promise.all([
-        api.get(`/api/messages/conversations/${conv.id}`),
-        api.get('/api/orders?role=provider&status=pending').catch(() => []),
-      ])
+      const msgs = await api.get(`/api/messages/conversations/${convId}`)
+      if (activeConvIdRef.current !== convId) return
       setMessages(msgs)
-      const match = Array.isArray(orders)
-        ? orders.find(o => o.buyer_id === conv.other_id)
-        : null
-      setPendingOrder(match ?? null)
-    } catch {
-      // non-fatal: conversation stays open with empty messages
-    } finally {
-      setLoadingMsgs(false)
-    }
-  }, [])
 
-  // Fetch conversation list on mount; honour ?conv= param from ServiceDetailPage
+      let resolvedServiceId = serviceId
+
+      if (!resolvedServiceId && !serviceIdOverride) {
+        const ctx = await api.get(
+          `/api/messages/conversations/${convId}/service-context`
+        )
+        if (activeConvIdRef.current !== convId) return
+        if (ctx?.service_id) {
+          resolvedServiceId = ctx.service_id
+          setActiveServiceId(ctx.service_id)
+          activeServiceIdRef.current = ctx.service_id
+        }
+      }
+
+      if (resolvedServiceId) {
+        await fetchTamamdirStatus(convId, resolvedServiceId, conv.other_id)
+      }
+    } catch {
+      if (activeConvIdRef.current === convId && serviceIdOverride) {
+        setActiveServiceId(serviceIdOverride)
+      }
+    } finally {
+      if (activeConvIdRef.current === convId) {
+        setLoadingMsgs(false)
+      }
+    }
+  }, [fetchTamamdirStatus])
+
+  const handleSelectConv = (conv) => {
+    const params = { conv: conv.id }
+    if (conv.service_id) params.service = conv.service_id
+    setSearchParams(params)
+    selectConv(conv)
+  }
+
+  const handleSelectConvFromList = (convId) => {
+    const conv = convs.find(c => c.id === convId)
+    if (conv) handleSelectConv(conv)
+  }
+
   useEffect(() => {
+    if (requestedServiceId && !activeConv) {
+      setActiveServiceId(requestedServiceId)
+    }
+  }, [requestedServiceId, activeConv?.id])
+
+  useEffect(() => {
+    if (!activeServiceId) {
+      setActiveService(null)
+      return
+    }
+    let cancelled = false
+    api.get(`/api/services/${activeServiceId}`)
+      .then(data => { if (!cancelled) setActiveService(data) })
+      .catch(() => { if (!cancelled) setActiveService(null) })
+    return () => { cancelled = true }
+  }, [activeServiceId])
+
+  useEffect(() => {
+    let cancelled = false
     setLoadingConvs(true)
-    api.get('/api/messages/conversations')
-      .then(data => {
+
+    const load = async () => {
+      try {
+        const all = await fetchAllConversations()
+        if (cancelled) return
+
+        let data = filterConversationsByRole(all, roleFilter)
+
+        if (requestedServiceId && !all.some(c => c.service_id === requestedServiceId) && user) {
+          const created = await openConversationForService(requestedServiceId, all)
+          if (cancelled) return
+          if (created) {
+            const merged = [created, ...all.filter(c => c.id !== created.id)]
+            data = filterConversationsByRole(merged, roleFilter)
+            if (!data.some(c => c.id === created.id)) {
+              data = [created, ...data]
+            }
+          }
+        }
+
         setConvs(data)
-        if (data.length === 0) return
-        const target = requestedConvId
-          ? data.find(c => c.id === requestedConvId) ?? data[0]
-          : data[0]
-        selectConv(target)
+
+        if (data.length === 0) {
+          setActiveConv(null)
+          setMessages([])
+          return
+        }
+
+        if (!initialUrlHandledRef.current && (requestedConvId || requestedServiceId)) {
+          initialUrlHandledRef.current = true
+
+          let target = null
+          if (requestedServiceId) {
+            target = all.find(c => c.service_id === requestedServiceId)
+          }
+          if (!target && requestedConvId) {
+            const byConv = all.find(c => c.id === requestedConvId)
+            if (byConv && (!requestedServiceId || byConv.service_id === requestedServiceId)) {
+              target = byConv
+            }
+          }
+          if (!target && requestedServiceId) {
+            target = await openConversationForService(requestedServiceId, all)
+          }
+
+          if (target) {
+            const params = { conv: target.id }
+            if (target.service_id) params.service = target.service_id
+            setSearchParams(params)
+            selectConv(target, target.service_id ?? requestedServiceId)
+            return
+          }
+
+          if (requestedServiceId) {
+            setActiveConv(null)
+            setMessages([])
+            return
+          }
+        }
+
+        if (activeConvIdRef.current) {
+          const current = data.find(c => c.id === activeConvIdRef.current)
+          if (current) {
+            setActiveConv(current)
+            return
+          }
+        }
+
+        const first = data[0]
+        const params = { conv: first.id }
+        if (first.service_id) params.service = first.service_id
+        setSearchParams(params)
+        selectConv(first)
+      } catch {
+        if (!cancelled) setConvs([])
+      } finally {
+        if (!cancelled) setLoadingConvs(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [
+    roleFilter,
+    fetchAllConversations,
+    filterConversationsByRole,
+    openConversationForService,
+    selectConv,
+    requestedConvId,
+    requestedServiceId,
+    user,
+    setSearchParams,
+  ])
+
+  // Real-time: join active conversation room
+  useEffect(() => {
+    if (!activeConv?.id) return
+    if (prevConvIdRef.current && prevConvIdRef.current !== activeConv.id) {
+      leaveConversation(prevConvIdRef.current)
+    }
+    joinConversation(activeConv.id)
+    prevConvIdRef.current = activeConv.id
+    setConvs(prev => prev.map(c =>
+      c.id === activeConv.id ? { ...c, unread_count: 0 } : c
+    ))
+  }, [activeConv?.id])
+
+  // Real-time: socket listeners
+  useEffect(() => {
+    if (!user) return
+    const socket = getSocket()
+    if (!socket) return
+
+    const onNewMessage = (msg) => {
+      if (msg.conversation_id === activeConvIdRef.current) {
+        setMessages(prev => (prev.some(m => m.id === msg.id) ? prev : [...prev, msg]))
+      }
+      setConvs(prev => prev.map(c =>
+        c.id === msg.conversation_id
+          ? {
+              ...c,
+              last_message: msg.content,
+              last_msg_at: msg.created_at,
+              unread_count: msg.conversation_id === activeConvIdRef.current ? 0 : c.unread_count,
+            }
+          : c
+      ))
+    }
+
+    const onConvUpdated = ({ id, last_message, last_msg_at }) => {
+      const isActive = id === activeConvIdRef.current
+      setConvs(prev => {
+        const next = prev.map(c =>
+          c.id === id
+            ? {
+                ...c,
+                last_message,
+                last_msg_at,
+                unread_count: isActive ? 0 : (c.unread_count ?? 0) + 1,
+              }
+            : c
+        )
+        return [...next].sort(
+          (a, b) => new Date(b.last_msg_at ?? 0) - new Date(a.last_msg_at ?? 0)
+        )
       })
-      .catch(() => {})
-      .finally(() => setLoadingConvs(false))
-  }, [selectConv, requestedConvId])
+    }
+
+    const onTamamdirUpdate = (payload) => {
+      if (payload.conversation_id && payload.conversation_id !== activeConvIdRef.current) return
+      if (
+        payload.service_id &&
+        activeConvRef.current?.service_id &&
+        payload.service_id !== activeConvRef.current.service_id
+      ) {
+        return
+      }
+
+      if (payload.service_id && payload.service_id !== activeServiceIdRef.current) {
+        setActiveServiceId(payload.service_id)
+        activeServiceIdRef.current = payload.service_id
+      }
+
+      setTamamdirStatus(prev =>
+        mergeTamamdirStatus(prev, payload, user?.id, activeConvRef.current?.other_id)
+      )
+      if (!payload.both_confirmed) setShowCancelConfirm(false)
+    }
+
+    socket.on('message:new', onNewMessage)
+    socket.on('conversation:updated', onConvUpdated)
+    socket.on('tamamdir:update', onTamamdirUpdate)
+
+    return () => {
+      socket.off('message:new', onNewMessage)
+      socket.off('conversation:updated', onConvUpdated)
+      socket.off('tamamdir:update', onTamamdirUpdate)
+      if (prevConvIdRef.current) leaveConversation(prevConvIdRef.current)
+    }
+  }, [user?.id])
 
   const handleSend = async () => {
-    if (!message.trim() || !activeConv || sending) return
+    if (!message.trim() || !activeConv || sending || tamamdirStatus?.i_am_banned) return
     const text = message.trim()
     setMessage('')
     setSending(true)
     try {
       const msg = await api.post(`/api/messages/conversations/${activeConv.id}`, { content: text })
-      setMessages(prev => [...prev, msg])
+      setMessages(prev => (prev.some(m => m.id === msg.id) ? prev : [...prev, msg]))
       setConvs(prev => prev.map(c =>
         c.id === activeConv.id ? { ...c, last_message: text, last_msg_at: msg.created_at } : c
       ))
@@ -105,23 +521,162 @@ export default function MessagesPage() {
   }
 
   const handleTamamdir = async () => {
-    if (!pendingOrder || accepting) return
-    setAccepting(true)
+    if (!activeConv || !activeServiceId || tamamdirSubmitting) return
+    if (tamamdirStatus?.my_confirmed || tamamdirStatus?.both_confirmed) return
+
+    setTamamdirSubmitting(true)
     try {
-      await api.patch(`/api/orders/${pendingOrder.id}/accept`)
-      setTamamdirDone(true)
-      setPendingOrder(null)
-    } catch {
-      // keep button visible so user can retry
+      const status = await api.post(
+        `/api/messages/conversations/${activeConv.id}/tamamdir`,
+        { service_id: activeServiceId }
+      )
+      if (status.service_id && status.service_id !== activeServiceId) {
+        setActiveServiceId(status.service_id)
+        activeServiceIdRef.current = status.service_id
+      }
+      setTamamdirStatus(prev => mergeTamamdirStatus(prev, status, user?.id, activeConv?.other_id))
+      if (status.both_confirmed && activeConv?.id && activeServiceId) {
+        await fetchTamamdirStatus(activeConv.id, activeServiceId, activeConv?.other_id)
+      }
+    } catch (err) {
+      if (err.status === 403 && err.data) {
+        setTamamdirStatus(prev => mergeTamamdirStatus(prev, err.data, user?.id, activeConv?.other_id))
+      }
     } finally {
-      setAccepting(false)
+      setTamamdirSubmitting(false)
     }
+  }
+
+  const handleConfirmCancel = async () => {
+    if (!activeConv || !activeServiceId || cancelSubmitting) return
+
+    setCancelSubmitting(true)
+    try {
+      const status = await api.post(
+        `/api/messages/conversations/${activeConv.id}/tamamdir/cancel`,
+        { service_id: activeServiceId }
+      )
+      setTamamdirStatus(prev => mergeTamamdirStatus(prev, status, user?.id, activeConv?.other_id))
+      setShowCancelConfirm(false)
+    } catch {
+      // keep modal open so user can retry
+    } finally {
+      setCancelSubmitting(false)
+    }
+  }
+
+  const handleUnban = async () => {
+    if (!activeConv || !activeServiceId || unbanSubmitting) return
+
+    setUnbanSubmitting(true)
+    try {
+      const status = await api.post(
+        `/api/messages/conversations/${activeConv.id}/tamamdir/unban`,
+        { service_id: activeServiceId }
+      )
+      setTamamdirStatus(prev => mergeTamamdirStatus(prev, status, user?.id, activeConv?.other_id))
+    } catch {
+      // non-fatal
+    } finally {
+      setUnbanSubmitting(false)
+    }
+  }
+
+  const cancelModalCopy = getCancelModalCopy(tamamdirStatus, t)
+
+  const roleFilters = [
+    { id: 'all', labelKey: 'messages.filterAll' },
+    { id: 'provider', labelKey: 'messages.filterProvider' },
+    { id: 'customer', labelKey: 'messages.filterCustomer' },
+  ]
+
+  const serviceCover = activeService?.images?.find(i => i.is_cover)?.image_url
+    ?? activeService?.images?.[0]?.image_url
+    ?? null
+  const isServiceProvider = activeService?.provider_id === user?.id
+  const isServiceInactive = activeService != null && !isServiceLive(activeService)
+  const hasOngoingArrangement = Boolean(
+    tamamdirStatus?.my_confirmed ||
+    tamamdirStatus?.both_confirmed ||
+    tamamdirStatus?.other_confirmed
+  )
+  const customerMessagingBlocked = isServiceInactive && !isServiceProvider
+  const messagingDisabled = tamamdirStatus?.i_am_banned || customerMessagingBlocked
+
+  const renderTamamdirAction = () => {
+    if (!activeServiceId) return null
+
+    if (isServiceInactive && !hasOngoingArrangement) return null
+
+    if (tamamdirStatus?.is_banned && tamamdirStatus?.can_unban) {
+      return (
+        <button
+          onClick={handleUnban}
+          disabled={unbanSubmitting}
+          className="text-sm font-semibold text-green-primary bg-white px-5 py-2.5 rounded-xl hover:bg-green-pale transition-colors disabled:opacity-60 shrink-0 shadow-md"
+        >
+          {unbanSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : t('messages.removeBan')}
+        </button>
+      )
+    }
+
+    if (tamamdirStatus?.is_banned) return null
+
+    if (tamamdirStatus?.both_confirmed && tamamdirStatus?.my_review_submitted && !tamamdirStatus?.other_review_submitted) {
+      return (
+        <div className="bg-amber-100 text-amber-700 text-sm font-medium px-5 py-2.5 rounded-xl border border-amber-200 shrink-0 shadow-sm">
+          {t('messages.waitingFeedback', { name: activeConv?.other_name })}
+        </div>
+      )
+    }
+
+    if (tamamdirStatus?.both_confirmed && !tamamdirStatus?.my_review_submitted) {
+      return (
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowFeedbackModal(true)}
+            className="text-sm font-semibold text-green-primary bg-white px-4 py-2.5 rounded-xl hover:bg-green-pale transition-colors shadow-md"
+          >
+            {tamamdirStatus?.my_existing_review ? t('messages.updateFeedback') : t('messages.leaveFeedback')}
+          </button>
+          <button
+            onClick={() => setShowCancelConfirm(true)}
+            disabled={cancelSubmitting}
+            className="text-sm font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-200 px-5 py-2.5 rounded-xl transition-colors disabled:opacity-60"
+          >
+            {t('common.cancel')}
+          </button>
+        </div>
+      )
+    }
+    if (tamamdirStatus?.my_confirmed && !tamamdirStatus?.both_confirmed) {
+      return (
+        <div className="bg-amber-100 text-amber-700 text-sm font-medium px-5 py-2.5 rounded-xl border border-amber-200 shrink-0 shadow-sm">
+          {t('messages.waitingApproval', { name: activeConv?.other_name })}
+        </div>
+      )
+    }
+    if (isServiceInactive) return null
+    return (
+      <button
+        onClick={handleTamamdir}
+        disabled={tamamdirSubmitting}
+        title={t('messages.confirmService')}
+        className="flex items-center border-2 border-green-primary rounded-lg px-2 py-1 bg-transparent hover:bg-green-pale/40 transition-colors disabled:opacity-60 disabled:pointer-events-none shrink-0"
+      >
+        {tamamdirSubmitting ? (
+          <Loader2 className="w-5 h-5 text-green-primary animate-spin" />
+        ) : (
+          <TamamdirLogo className="h-8" />
+        )}
+      </button>
+    )
   }
 
   if (loadingConvs) {
     return (
-      <div className="flex flex-col h-screen bg-white overflow-hidden">
-        <Navbar />
+      <div className="flex flex-col flex-1 min-h-0 bg-amber-50 overflow-hidden">
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-green-primary animate-spin" />
         </div>
@@ -130,25 +685,40 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden">
-      <Navbar />
-
-      <div className="flex flex-1 overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 bg-amber-50 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
 
         {/* ── Conversation list ── */}
-        <div className="w-80 shrink-0 border-r border-gray-100 flex flex-col">
-          <div className="px-5 py-5 border-b border-gray-100">
-            <h2 className="text-xl font-bold text-gray-900">Chats</h2>
+        <div className="w-80 shrink-0 border-r border-amber-100 flex flex-col bg-amber-50">
+          <div className={chatPanelHeaderClass}>
+            <h2 className={cn('text-xl font-bold', coffeeText)}>{t('messages.chats')}</h2>
           </div>
-          <div className="px-4 py-3 border-b border-gray-100">
-            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+          <div className="px-4 py-3 border-b border-amber-100 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {roleFilters.map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setRoleFilter(opt.id)}
+                  className={cn(
+                    'text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors',
+                    roleFilter === opt.id
+                      ? 'bg-green-primary text-white border-green-primary'
+                      : 'bg-white text-gray-600 border-amber-200 hover:border-green-primary hover:text-green-primary'
+                  )}
+                >
+                  {t(opt.labelKey)}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 bg-white border border-amber-200 rounded-lg px-3 py-2">
               <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
                 type="text"
-                placeholder="Search conversations..."
+                placeholder={t('messages.searchPlaceholder')}
                 className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-full"
               />
             </div>
@@ -156,22 +726,22 @@ export default function MessagesPage() {
 
           <div className="flex-1 overflow-y-auto">
             {convs.length === 0 && (
-              <p className="text-center text-gray-400 text-sm mt-10 px-4">No conversations yet.</p>
+              <p className="text-center text-gray-400 text-sm mt-10 px-4">{t('messages.noConversations')}</p>
             )}
             {convs.map(conv => (
               <button
                 key={conv.id}
-                onClick={() => selectConv(conv)}
+                onClick={() => handleSelectConvFromList(conv.id)}
                 className={cn(
-                  'w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-gray-50 transition-colors border-b border-gray-50',
-                  activeConv?.id === conv.id && 'bg-green-pale border-l-2 border-l-green-primary'
+                  'w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-amber-100/80 transition-colors border-b border-amber-100/60',
+                  activeConv?.id === conv.id && 'bg-amber-100 border-l-2 border-l-amber-400'
                 )}
               >
                 <div className="relative shrink-0">
                   {conv.other_avatar
-                    ? <img src={conv.other_avatar} alt={conv.other_name} className="w-11 h-11 rounded-full object-cover" />
+                    ? <img src={resolveMediaUrl(conv.other_avatar)} alt={conv.other_name} className="w-11 h-11 rounded-full object-cover" />
                     : (
-                      <div className="w-11 h-11 rounded-full bg-green-pale flex items-center justify-center">
+                      <div className="w-11 h-11 rounded-full bg-amber-100 flex items-center justify-center">
                         <span className="text-green-primary font-bold text-sm">{conv.other_name?.[0] ?? '?'}</span>
                       </div>
                     )
@@ -179,13 +749,18 @@ export default function MessagesPage() {
                   <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-light rounded-full border-2 border-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <p className="font-semibold text-sm text-gray-900 truncate">{conv.other_name}</p>
-                    <span className="text-xs text-gray-400 shrink-0 ml-2">
-                      {formatConvTime(conv.last_msg_at)}
+                  {conv.service_title && (
+                    <span className="inline-block text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-green-pale text-green-primary mb-1 truncate max-w-full">
+                      {conv.service_title}
+                    </span>
+                  )}
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <p className="font-semibold text-sm text-coffee truncate">{conv.other_name}</p>
+                    <span className="text-xs text-gray-400 shrink-0">
+                      {formatConvTime(conv.last_msg_at, t)}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-400 truncate">{conv.last_message || 'No messages yet'}</p>
+                  <p className="text-xs text-gray-400 truncate">{conv.last_message || t('messages.noMessagesYet')}</p>
                 </div>
                 {conv.unread_count > 0 && (
                   <span className="w-5 h-5 bg-green-primary text-white text-xs font-bold rounded-full flex items-center justify-center shrink-0 mt-0.5">
@@ -201,57 +776,119 @@ export default function MessagesPage() {
         {activeConv ? (
           <div className="flex-1 flex flex-col min-w-0">
 
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  {activeConv.other_avatar
-                    ? <img src={activeConv.other_avatar} alt={activeConv.other_name} className="w-10 h-10 rounded-full object-cover" />
-                    : (
-                      <div className="w-10 h-10 rounded-full bg-green-pale flex items-center justify-center">
-                        <span className="text-green-primary font-bold text-sm">{activeConv.other_name?.[0] ?? '?'}</span>
-                      </div>
-                    )
-                  }
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-light rounded-full border-2 border-white" />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900 text-sm">{activeConv.other_name}</p>
-                  {pendingOrder && (
-                    <p className="text-xs text-green-primary font-medium">
-                      Pending: <span className="font-semibold">{pendingOrder.service_title}</span>
-                    </p>
+            {/* Vinted-style chat header */}
+            <div className="bg-amber-50 border-b border-amber-100 shrink-0">
+              <div className={cn('relative flex items-center justify-center', chatPanelHeaderClass)}>
+                <Link
+                  to={`/users/${activeConv.other_id}`}
+                  className={cn('text-xl font-semibold truncate max-w-[70%] text-center hover:underline', coffeeText)}
+                >
+                  {activeConv.other_name}
+                </Link>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                  <button
+                    type="button"
+                    onClick={() => setShowChatMenu(v => !v)}
+                    className="p-2 rounded-lg hover:bg-amber-200/60 text-gray-400"
+                    aria-label={t('messages.chatOptions')}
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
+                  {showChatMenu && (
+                    <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-amber-200 rounded-xl shadow-lg py-1 z-10">
+                      <button
+                        type="button"
+                        disabled={blockBusy}
+                        onClick={toggleBlockUser}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 text-left disabled:opacity-60"
+                      >
+                        <Ban className="w-4 h-4" />
+                        {isUserBlocked ? t('messages.unblockUser') : t('messages.blockUser')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowChatMenu(false)
+                          setShowReportModal(true)
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 text-left"
+                      >
+                        <Flag className="w-4 h-4" />
+                        {t('messages.reportConversation')}
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                {tamamdirDone ? (
-                  <div className="flex items-center gap-2 bg-green-pale text-green-primary text-sm font-semibold px-4 py-2 rounded-lg">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Order Accepted!
-                  </div>
-                ) : pendingOrder && (
-                  <button
-                    onClick={handleTamamdir}
-                    disabled={accepting}
-                    className="flex items-center gap-2 bg-green-primary text-white text-sm font-semibold px-4 py-2.5 rounded-lg hover:bg-green-dark transition-all duration-200 hover:scale-105 active:scale-95 shadow-md disabled:opacity-60 disabled:pointer-events-none"
-                  >
-                    {accepting
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : <CheckCircle2 className="w-4 h-4" />
-                    }
-                    Tamamdır! Accept Order
-                  </button>
-                )}
-                <button className="p-2 rounded-lg hover:bg-gray-100">
-                  <MoreVertical className="w-5 h-5 text-gray-400" />
-                </button>
-              </div>
+              {(activeServiceId || activeConv?.service_title) && (
+                <div className="flex items-center gap-3 px-4 py-3 border-t border-amber-100">
+                  {activeServiceId ? (
+                    <Link
+                      to={`/services/${activeServiceId}`}
+                      className="flex items-center gap-3 min-w-0 flex-1 hover:opacity-90 transition-opacity"
+                    >
+                      {serviceCover ? (
+                        <img
+                          src={resolveMediaUrl(serviceCover)}
+                          alt=""
+                          className="w-14 h-14 rounded-md object-cover shrink-0 border border-amber-200"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-md bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0">
+                          <span className="text-coffee text-sm font-bold">S</span>
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-coffee truncate leading-tight">
+                          {isServiceProvider ? t('messages.serviceOffered') : t('messages.requestedService')}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">
+                          {activeService?.title ?? tamamdirStatus?.service_title ?? activeConv?.service_title ?? t('messages.loading')}
+                          {(activeService?.price != null || activeConv?.service_price != null) && (
+                            <>
+                              {' · '}
+                              {formatLocalizedPrice(
+                                t,
+                                activeService?.price ?? activeConv?.service_price,
+                                activeService?.price_unit ?? activeConv?.service_price_unit
+                              )}
+                            </>
+                          )}
+                          {isServiceInactive && (
+                            <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                              · {t('common.archived')}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-14 h-14 rounded-md bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0">
+                        <span className="text-coffee text-sm font-bold">S</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-coffee truncate leading-tight">
+                          {t('messages.requestedService')}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">
+                          {activeConv.service_title}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {activeServiceId && (
+                    <div className="shrink-0">
+                      {renderTamamdirAction()}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-gray-50/30">
+            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-amber-50">
               {loadingMsgs ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="w-6 h-6 text-green-primary animate-spin" />
@@ -259,14 +896,14 @@ export default function MessagesPage() {
               ) : (
                 <>
                   <div className="text-center">
-                    <span className="text-xs text-gray-400 bg-white px-3 py-1 rounded-full border border-gray-100">
-                      TODAY
+                    <span className="text-xs text-gray-400 bg-white px-3 py-1 rounded-full border border-amber-200">
+                      {t('common.today')}
                     </span>
                   </div>
 
                   {messages.length === 0 && (
                     <p className="text-center text-gray-400 text-sm pt-8">
-                      No messages yet. Say hello!
+                      {t('messages.sayHello')}
                     </p>
                   )}
 
@@ -275,20 +912,22 @@ export default function MessagesPage() {
                     return (
                       <div key={msg.id} className={cn('flex items-end gap-3', isMe ? 'flex-row-reverse' : 'flex-row')}>
                         {!isMe && (
-                          activeConv.other_avatar
-                            ? <img src={activeConv.other_avatar} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 mb-1" />
-                            : (
-                              <div className="w-8 h-8 rounded-full bg-green-pale flex items-center justify-center shrink-0 mb-1">
-                                <span className="text-green-primary text-xs font-bold">{activeConv.other_name?.[0] ?? '?'}</span>
-                              </div>
-                            )
+                          <Link to={`/users/${activeConv.other_id}`} className="shrink-0 mb-1">
+                            {activeConv.other_avatar
+                              ? <img src={resolveMediaUrl(activeConv.other_avatar)} alt="" className="w-8 h-8 rounded-full object-cover" />
+                              : (
+                                <div className="w-8 h-8 rounded-full bg-green-pale flex items-center justify-center">
+                                  <span className="text-green-primary text-xs font-bold">{activeConv.other_name?.[0] ?? '?'}</span>
+                                </div>
+                              )}
+                          </Link>
                         )}
 
                         <div className={cn(
                           'max-w-xs lg:max-w-md px-4 py-3 rounded-2xl text-sm leading-relaxed',
                           isMe
                             ? 'bg-green-primary text-white rounded-br-sm'
-                            : 'bg-white text-gray-800 border border-gray-100 rounded-bl-sm shadow-sm'
+                            : 'bg-amber-100 text-coffee border border-amber-200 rounded-bl-sm shadow-sm'
                         )}>
                           {msg.content}
                           <div className={cn('text-xs mt-1', isMe ? 'text-green-light text-right' : 'text-gray-400')}>
@@ -298,7 +937,7 @@ export default function MessagesPage() {
 
                         {isMe && (
                           user?.avatar_url
-                            ? <img src={user.avatar_url} alt="Me" className="w-8 h-8 rounded-full object-cover shrink-0 mb-1" />
+                            ? <img src={resolveMediaUrl(user.avatar_url)} alt="Me" className="w-8 h-8 rounded-full object-cover shrink-0 mb-1" />
                             : (
                               <div className="w-8 h-8 rounded-full bg-green-primary flex items-center justify-center text-white text-xs font-bold shrink-0 mb-1">
                                 {user?.full_name?.[0] ?? 'ME'}
@@ -309,41 +948,116 @@ export default function MessagesPage() {
                     )
                   })}
 
-                  {tamamdirDone && (
-                    <div className="flex justify-center">
-                      <div className="bg-green-pale text-green-primary text-sm font-semibold px-6 py-3 rounded-xl border border-green-light flex items-center gap-2">
-                        <CheckCircle2 className="w-5 h-5" />
-                        Order accepted — Tamamdır! 🎉
-                      </div>
-                    </div>
-                  )}
                   <div ref={messagesEndRef} />
                 </>
               )}
             </div>
 
+            {/* Status banner — above input */}
+            {tamamdirStatus?.i_am_banned && (
+              <div className="px-6 py-3 bg-red-50 border-t border-red-100 flex items-center justify-center gap-2">
+                <Ban className="w-4 h-4 text-red-500 shrink-0" />
+                <p className="text-sm font-semibold text-red-600 text-center">
+                  {t('messages.bannedUntil', { date: formatBanUntil(tamamdirStatus.banned_until) })}
+                </p>
+              </div>
+            )}
+            {tamamdirStatus?.is_banned && !tamamdirStatus?.i_am_banned && (
+              <div className="px-6 py-3 bg-amber-50 border-t border-amber-100 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Ban className="w-4 h-4 text-amber-600 shrink-0" />
+                  <p className="text-sm font-semibold text-amber-700">
+                    {t('messages.customerBannedUntil', { date: formatBanUntil(tamamdirStatus.banned_until) })}
+                  </p>
+                </div>
+                {tamamdirStatus.can_unban && (
+                  <button
+                    onClick={handleUnban}
+                    disabled={unbanSubmitting}
+                    className="text-xs font-semibold text-green-primary bg-white border border-green-primary px-3 py-1.5 rounded-lg hover:bg-green-pale shrink-0 disabled:opacity-60"
+                  >
+                    {unbanSubmitting ? t('messages.removingBan') : t('messages.removeBan')}
+                  </button>
+                )}
+              </div>
+            )}
+            {tamamdirStatus?.other_confirmed &&
+              !tamamdirStatus?.my_confirmed &&
+              !tamamdirStatus?.both_confirmed &&
+              !tamamdirStatus?.is_banned &&
+              !isServiceInactive && (
+              <div className="px-6 py-4 bg-green-pale border-t border-green-100">
+                <div className="flex items-center gap-2 min-w-0">
+                  <CheckCircle2 className="w-4 h-4 text-green-primary shrink-0" />
+                  <p className="text-sm font-semibold text-green-primary">
+                    {t('messages.otherSaidTamamdir', { name: activeConv?.other_name })}
+                  </p>
+                </div>
+              </div>
+            )}
+            {needsFeedbackPrompt(tamamdirStatus) && !tamamdirStatus?.is_banned && (
+              <div className="px-6 py-4 bg-green-pale border-t border-green-100">
+                <div className="flex items-center gap-2 min-w-0">
+                  <CheckCircle2 className="w-4 h-4 text-green-primary shrink-0" />
+                  <p className="text-sm font-semibold text-green-primary">
+                    {t('messages.leaveFeedbackPrompt')}
+                  </p>
+                </div>
+              </div>
+            )}
+            {isServiceInactive && (
+              <div className="px-6 py-3 bg-amber-50 border-t border-amber-100 flex items-center justify-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <p className="text-sm font-semibold text-amber-700 text-center">
+                  {isServiceProvider
+                    ? t('messages.archivedProvider')
+                    : t('messages.archivedCustomer')}
+                </p>
+              </div>
+            )}
+
             {/* Input */}
-            <div className="px-6 py-4 border-t border-gray-100 bg-white">
+            <div className="px-6 py-4 border-t border-amber-100 bg-amber-50">
               <div className="flex items-center gap-3">
-                <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                <button
+                  disabled={messagingDisabled}
+                  className="p-2 rounded-lg hover:bg-amber-100 text-gray-500 hover:text-gray-600 disabled:opacity-40 disabled:pointer-events-none"
+                >
                   <Plus className="w-5 h-5" />
                 </button>
-                <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                <button
+                  disabled={messagingDisabled}
+                  className="p-2 rounded-lg hover:bg-amber-100 text-gray-500 hover:text-gray-600 disabled:opacity-40 disabled:pointer-events-none"
+                >
                   <Image className="w-5 h-5" />
                 </button>
-                <div className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5">
+                <div className={cn(
+                  'flex-1 border rounded-xl px-4 py-2.5',
+                  messagingDisabled
+                    ? 'bg-amber-100/80 border-amber-200'
+                    : 'bg-white border-amber-200'
+                )}>
                   <input
                     type="text"
-                    placeholder="Type your message..."
+                    placeholder={
+                      tamamdirStatus?.i_am_banned
+                        ? t('messages.placeholderBanned')
+                        : customerMessagingBlocked
+                          ? t('messages.placeholderInactive')
+                          : t('messages.placeholderType')
+                    }
                     value={message}
                     onChange={e => setMessage(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleSend() }}
-                    className="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none w-full"
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey && !messagingDisabled) handleSend()
+                    }}
+                    disabled={messagingDisabled}
+                    className="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none w-full disabled:cursor-not-allowed"
                   />
                 </div>
                 <button
                   onClick={handleSend}
-                  disabled={sending || !message.trim()}
+                  disabled={sending || !message.trim() || messagingDisabled}
                   className="w-10 h-10 bg-green-primary rounded-xl flex items-center justify-center hover:bg-green-dark transition-colors disabled:opacity-50 disabled:pointer-events-none"
                 >
                   {sending
@@ -355,10 +1069,83 @@ export default function MessagesPage() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center bg-gray-50/30">
-            <p className="text-gray-400 text-sm">Select a conversation to start messaging.</p>
+          <div className="flex-1 flex flex-col min-w-0 bg-amber-50">
+            <div className="flex-1 flex items-center justify-center px-6">
+              <div className="text-center max-w-sm">
+                <p className="text-base font-medium text-gray-600 mb-1">
+                  {convs.length === 0 ? t('messages.emptyTitle') : t('messages.noChatSelected')}
+                </p>
+                <p className="text-sm text-gray-400">
+                  {convs.length === 0
+                    ? t('messages.emptyDesc')
+                    : requestedServiceId
+                      ? t('messages.pickConversation')
+                      : t('messages.selectConversation')}
+                </p>
+              </div>
+            </div>
           </div>
         )}
+
+        {showCancelConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+              <h3 className="text-lg font-semibold text-coffee mb-2">{t('messages.cancelArrangementTitle')}</h3>
+              <p className="text-sm text-gray-600 mb-3">{cancelModalCopy.body}</p>
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 mb-6">
+                {cancelModalCopy.note}
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowCancelConfirm(false)}
+                  disabled={cancelSubmitting}
+                  className="text-sm font-medium text-gray-500 hover:text-gray-700 px-4 py-2"
+                >
+                  {t('common.no')}
+                </button>
+                <button
+                  onClick={handleConfirmCancel}
+                  disabled={cancelSubmitting}
+                  className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-60"
+                >
+                  {cancelSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {t('messages.yesCancel')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <LeaveFeedbackModal
+          open={showFeedbackModal}
+          onClose={() => setShowFeedbackModal(false)}
+          onSuccess={async () => {
+            setShowFeedbackThanks(true)
+            if (activeConv?.id && activeServiceId) {
+              await fetchTamamdirStatus(activeConv.id, activeServiceId, activeConv?.other_id)
+            }
+          }}
+          orderId={tamamdirStatus?.order_id}
+          isCustomer={tamamdirStatus?.is_customer}
+          revieweeName={activeConv?.other_name}
+          serviceTitle={activeService?.title ?? tamamdirStatus?.service_title}
+          initialRating={tamamdirStatus?.my_existing_review?.rating ?? 0}
+          initialComment={tamamdirStatus?.my_existing_review?.comment ?? ''}
+          isUpdate={!!tamamdirStatus?.my_existing_review}
+        />
+
+        <FeedbackThanksPopup
+          open={showFeedbackThanks}
+          onClose={() => setShowFeedbackThanks(false)}
+        />
+
+        <ReportModal
+          open={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          targetType="conversation"
+          targetId={activeConv?.id}
+          targetLabel={activeConv?.other_name}
+        />
 
       </div>
     </div>

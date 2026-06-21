@@ -1,19 +1,25 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import TopBar from "../components/TopBar";
+import NotificationsDropdown from "../components/NotificationsDropdown";
+import ProfileMenuDropdown from "../components/ProfileMenuDropdown";
 import BottomNav from "../components/BottomNav";
 import ServiceCard from "../components/ServiceCard";
 import { useServices } from "../context/ServicesContext";
+import { usePreferences } from "../context/PreferencesContext";
+
+const ALL_CATEGORY = "__all__";
 
 export default function ServicesPage() {
   const navigate = useNavigate();
   const { services } = useServices();
+  const { t } = usePreferences();
   const CATEGORIES = useMemo(() => {
     const cats = Array.from(new Set(services.map((s) => s.category)));
-    return ["Tümü", ...cats];
+    return [ALL_CATEGORY, ...cats];
   }, [services]);
   const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState("Tümü");
+  const [activeCategory, setActiveCategory] = useState(ALL_CATEGORY);
 
   const filtered = useMemo(() => {
     return services.filter((s) => {
@@ -22,7 +28,7 @@ export default function ServicesPage() {
         s.description.toLowerCase().includes(search.toLowerCase()) ||
         s.providerName.toLowerCase().includes(search.toLowerCase());
       const matchesCategory =
-        activeCategory === "Tümü" || s.category === activeCategory;
+        activeCategory === ALL_CATEGORY || s.category === activeCategory;
       return matchesSearch && matchesCategory;
     });
   }, [services, search, activeCategory]);
@@ -31,19 +37,14 @@ export default function ServicesPage() {
     <div className="bg-background min-h-screen max-w-md mx-auto">
       <TopBar
         rightContent={
-          <div className="flex gap-1">
-            <button className="p-2 hover:bg-slate-50 transition-colors rounded-full">
-              <span className="material-symbols-outlined text-slate-500">notifications</span>
-            </button>
-            <button className="p-2 hover:bg-slate-50 transition-colors rounded-full">
-              <span className="material-symbols-outlined text-slate-500">settings</span>
-            </button>
+          <div className="flex items-center gap-1">
+            <NotificationsDropdown />
+            <ProfileMenuDropdown />
           </div>
         }
       />
 
       <main className="pt-20 px-margin-mobile pb-24">
-        {/* Search */}
         <section className="mb-lg">
           <div className="relative">
             <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">search</span>
@@ -52,7 +53,7 @@ export default function ServicesPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-12 pr-12 py-4 bg-surface-container-lowest border-none rounded-xl shadow-card focus:ring-2 focus:ring-primary/30 text-body-md text-on-surface transition-all outline-none"
-              placeholder="Hizmet ara..."
+              placeholder={t("services.searchPlaceholder")}
             />
             {search && (
               <button
@@ -65,7 +66,6 @@ export default function ServicesPage() {
           </div>
         </section>
 
-        {/* Category Pills */}
         <div className="flex gap-2 overflow-x-auto pb-3 no-scrollbar -mx-margin-mobile px-margin-mobile mb-2">
           {CATEGORIES.map((cat) => (
             <button
@@ -77,22 +77,21 @@ export default function ServicesPage() {
                   : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
               }`}
             >
-              {cat}
+              {cat === ALL_CATEGORY ? t("services.all") : cat}
             </button>
           ))}
         </div>
 
-        {/* Listings */}
         <div className="flex flex-col gap-gutter mt-2">
           {filtered.length === 0 ? (
             <div className="text-center py-16">
               <span className="material-symbols-outlined text-5xl text-outline-variant mb-3">search_off</span>
-              <p className="text-on-surface-variant font-medium">Sonuç bulunamadı.</p>
+              <p className="text-on-surface-variant font-medium">{t("services.noResults")}</p>
               <button
-                onClick={() => { setSearch(""); setActiveCategory("Tümü"); }}
+                onClick={() => { setSearch(""); setActiveCategory(ALL_CATEGORY); }}
                 className="mt-3 text-primary font-bold text-sm hover:underline"
               >
-                Filtreleri temizle
+                {t("services.clearFilters")}
               </button>
             </div>
           ) : (
@@ -101,7 +100,6 @@ export default function ServicesPage() {
         </div>
       </main>
 
-      {/* FAB */}
       <button
         onClick={() => navigate("/services/new")}
         className="fixed right-4 bottom-24 bg-primary text-on-primary w-14 h-14 rounded-full flex items-center justify-center shadow-xl active:scale-90 transition-transform z-40 max-w-md mx-auto"

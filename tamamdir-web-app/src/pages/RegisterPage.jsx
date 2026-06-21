@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CheckCircle2, Eye, EyeOff, Info, Users, BookOpen, Shield } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, Info, Users, BookOpen } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { usePreferences } from '../context/PreferencesContext'
+import TamamdirLogo from '../components/TamamdirLogo'
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' })
@@ -10,6 +12,7 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const { register } = useAuth()
+  const { t } = usePreferences()
   const navigate = useNavigate()
 
   const isIyte = form.email.endsWith('@iyte.edu.tr') || form.email.endsWith('@std.iyte.edu.tr')
@@ -18,111 +21,111 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (form.password.length < 8) { setError('Password must be at least 8 characters.'); return }
-    if (form.password !== form.confirm) { setError("Passwords don't match."); return }
+    if (!form.name.trim()) { setError(t('register.nameRequired')); return }
+    if (form.password.length < 8) { setError(t('register.passwordMin')); return }
+    if (form.password !== form.confirm) { setError(t('register.passwordMismatch')); return }
     setError('')
     setSubmitting(true)
     try {
-      const data = await register(form.name, form.email, form.password)
-      navigate(data.needs_interests ? '/onboarding' : '/home')
+      const data = await register(form.name.trim(), form.email.trim(), form.password)
+      navigate('/verify-email', {
+        state: {
+          email: data.email,
+          expiresInMinutes: data.expires_in_minutes,
+        },
+      })
     } catch (err) {
       const apiErrors = err.data?.errors
-      setError(apiErrors ? apiErrors[0].msg : (err.message || 'Registration failed.'))
+      setError(apiErrors ? apiErrors[0].msg : (err.message || t('register.failed')))
     } finally {
       setSubmitting(false)
     }
   }
 
-  return (
-    <div className="min-h-screen flex flex-col">
-      <div className="flex flex-1">
-        {/* Left green panel */}
-        <div className="hidden lg:flex lg:w-1/2 bg-green-primary flex-col justify-between p-12 relative overflow-hidden">
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-16">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-7 h-7 text-white" strokeWidth={2.5} />
-                <span className="text-2xl font-bold text-white tracking-tight">Tamamdır!</span>
-              </div>
-              <Link to="/login" className="text-sm text-green-light hover:text-white transition-colors">
-                Already have an account? <span className="font-semibold text-white">Login</span>
-              </Link>
-            </div>
+  const features = [
+    { icon: Users, titleKey: 'register.connectTitle', descKey: 'register.connectDesc' },
+    { icon: BookOpen, titleKey: 'register.offerTitle', descKey: 'register.offerDesc' },
+  ]
 
-            <h2 className="text-4xl font-bold text-white leading-tight mb-4">
-              Join the IYTE Community Marketplace
+  const footerCols = [
+    { titleKey: 'footer.platform', links: ['footer.browseServices', 'footer.becomeProvider'] },
+    { titleKey: 'footer.support', links: ['footer.campusSafety', 'footer.supportCenter'] },
+    { titleKey: 'footer.legal', links: ['footer.privacyPolicy', 'footer.termsOfUse'] },
+  ]
+
+  return (
+    <div className="bg-amber-50">
+      <div className="min-h-screen flex">
+        <div className="hidden lg:flex lg:w-1/2 bg-amber-50 flex-col p-12 relative overflow-hidden border-r border-amber-100">
+          <div className="relative z-10 shrink-0">
+            <TamamdirLogo className="h-[66px]" />
+          </div>
+
+          <div className="relative z-10 flex-1 flex flex-col justify-center py-8">
+            <h2 className="text-4xl font-bold text-coffee leading-tight mb-4">
+              {t('register.heroTitle')}
             </h2>
-            <p className="text-green-light mb-10">
-              The exclusive peer-to-peer platform for Izmir Institute of Technology students. Solve daily tasks, share skills, and build a safer campus together.
+            <p className="text-gray-600 mb-10">
+              {t('register.heroDesc')}
             </p>
 
             <div className="space-y-4">
-              {[
-                { icon: Users, title: 'Connect with peers', desc: 'Engage with fellow IYTE students directly.' },
-                { icon: BookOpen, title: 'Offer your skills', desc: 'Turn your talents into helpful campus services.' },
-                { icon: Shield, title: 'Safe campus-only network', desc: 'Verified @iyte.edu.tr access only.' },
-              ].map(({ icon: Icon, title, desc }) => (
-                <div key={title} className="flex items-start gap-4">
-                  <div className="w-10 h-10 bg-green-medium rounded-full flex items-center justify-center shrink-0">
-                    <Icon className="w-5 h-5 text-white" />
+              {features.map(({ icon: Icon, titleKey, descKey }) => (
+                <div key={titleKey} className="flex items-start gap-4">
+                  <div className="w-10 h-10 bg-green-pale rounded-full flex items-center justify-center shrink-0">
+                    <Icon className="w-5 h-5 text-green-primary" />
                   </div>
                   <div>
-                    <p className="text-white font-semibold text-sm">{title}</p>
-                    <p className="text-green-light text-sm">{desc}</p>
+                    <p className="text-coffee font-semibold text-sm">{t(titleKey)}</p>
+                    <p className="text-gray-600 text-sm">{t(descKey)}</p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="relative z-10 text-xs text-green-light">
-            © 2024 Tamamdır University Services. All rights reserved.
+          <div className="relative z-10 shrink-0 text-xs text-gray-400">
+            {t('common.copyright')}
           </div>
-
-          <div className="absolute -top-20 -right-20 w-80 h-80 bg-green-medium rounded-full opacity-20" />
-          <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-green-dark rounded-full opacity-30" />
         </div>
 
-        {/* Right form panel */}
-        <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 lg:px-20 py-12">
-          <div className="w-full max-w-md mx-auto">
-            {/* Mobile header */}
-            <div className="flex lg:hidden items-center justify-between mb-10">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-6 h-6 text-green-primary" />
-                <span className="text-xl font-bold text-green-primary">Tamamdır!</span>
-              </div>
-              <Link to="/login" className="text-sm text-green-primary font-medium hover:underline">Login</Link>
+        <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 lg:px-20 py-12 bg-green-primary relative overflow-hidden">
+          <div className="absolute -top-20 -right-20 w-80 h-80 bg-green-medium rounded-full opacity-20" />
+          <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-green-dark rounded-full opacity-30" />
+
+          <div className="relative z-10 w-full max-w-md mx-auto">
+            <div className="flex lg:hidden justify-end mb-6">
+              <Link to="/login" className="text-sm text-green-light font-medium hover:text-white hover:underline">{t('login.submit')}</Link>
             </div>
 
             <div className="mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Create your account</h1>
-              <p className="text-gray-500">Start your journey at IYTE today.</p>
+              <h1 className="text-3xl font-bold text-white mb-2">{t('register.title')}</h1>
+              <p className="text-green-light">{t('register.subtitle')}</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Full Name</label>
+                <label className="block text-sm font-medium text-white mb-1.5">{t('register.fullName')}</label>
                 <input
                   name="name"
                   type="text"
-                  placeholder="Enter your full name"
+                  placeholder={t('register.fullNamePlaceholder')}
                   value={form.name}
                   onChange={handleChange}
-                  className="input-field"
+                  className="input-field bg-amber-50 border-amber-100"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
+                <label className="block text-sm font-medium text-white mb-1.5">{t('common.emailAddress')}</label>
                 <div className="relative">
                   <input
                     name="email"
                     type="email"
-                    placeholder="your@iyte.edu.tr"
+                    placeholder={t('register.emailPlaceholder')}
                     value={form.email}
                     onChange={handleChange}
-                    className={`input-field pr-10 ${isIyte ? 'border-green-primary ring-2 ring-green-primary/20' : ''}`}
+                    className={`input-field pr-10 bg-amber-50 border-amber-100 ${isIyte ? 'border-green-primary ring-2 ring-green-primary/20' : ''}`}
                   />
                   {isIyte && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -132,55 +135,55 @@ export default function RegisterPage() {
                 </div>
                 {isIyte ? (
                   <div className="flex items-center gap-1.5 mt-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-green-primary" />
-                    <p className="text-xs text-green-primary font-medium">
-                      IYTE email detected — you'll receive a Verified Student badge!
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-light" />
+                    <p className="text-xs text-green-light font-medium">
+                      {t('register.iyteDetected')}
                     </p>
                   </div>
-                ) : (
+                ) : form.email ? (
                   <div className="flex items-center gap-1.5 mt-1.5">
-                    <Info className="w-3.5 h-3.5 text-gray-400" />
-                    <p className="text-xs text-gray-400">Only IYTE emails are accepted for verification.</p>
+                    <Info className="w-3.5 h-3.5 text-green-light" />
+                    <p className="text-xs text-green-light">{t('register.verificationHint')}</p>
                   </div>
-                )}
+                ) : null}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+                <label className="block text-sm font-medium text-white mb-1.5">{t('common.password')}</label>
                 <div className="relative">
                   <input
                     name="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Min. 8 characters"
+                    placeholder={t('register.passwordPlaceholder')}
                     value={form.password}
                     onChange={handleChange}
-                    className="input-field pr-10"
+                    className="input-field pr-10 bg-amber-50 border-amber-100"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
                 {form.password && form.password.length < 8 && (
-                  <p className="text-xs text-red-400 mt-1">Password must be at least 8 characters.</p>
+                  <p className="text-xs text-red-200 mt-1">{t('register.passwordMin')}</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
+                <label className="block text-sm font-medium text-white mb-1.5">{t('common.confirmPassword')}</label>
                 <input
                   name="confirm"
                   type="password"
-                  placeholder="Repeat your password"
+                  placeholder={t('register.confirmPlaceholder')}
                   value={form.confirm}
                   onChange={handleChange}
-                  className={`input-field ${form.confirm && form.confirm !== form.password ? 'border-red-400' : ''}`}
+                  className={`input-field bg-amber-50 border-amber-100 ${form.confirm && form.confirm !== form.password ? 'border-red-400' : ''}`}
                 />
                 {form.confirm && form.confirm !== form.password && (
-                  <p className="text-xs text-red-400 mt-1">Passwords don't match.</p>
+                  <p className="text-xs text-red-200 mt-1">{t('register.passwordMismatch')}</p>
                 )}
               </div>
 
@@ -192,62 +195,50 @@ export default function RegisterPage() {
                   onChange={(e) => setAgreed(e.target.checked)}
                   className="mt-0.5 w-4 h-4 accent-green-primary cursor-pointer"
                 />
-                <label htmlFor="terms" className="text-sm text-gray-600 cursor-pointer leading-relaxed">
-                  I agree to the{' '}
-                  <span className="text-green-primary font-medium hover:underline cursor-pointer">Terms of Service</span>
-                  {' '}and{' '}
-                  <span className="text-green-primary font-medium hover:underline cursor-pointer">Privacy Policy</span>.
+                <label htmlFor="terms" className="text-sm text-green-light cursor-pointer leading-relaxed">
+                  {t('register.termsPrefix')}{' '}
+                  <span className="text-white font-medium hover:underline cursor-pointer">{t('register.termsOfService')}</span>
+                  {' '}{t('register.and')}{' '}
+                  <span className="text-white font-medium hover:underline cursor-pointer">{t('register.privacyPolicy')}</span>.
                 </label>
               </div>
 
               {error && (
-                <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-4 py-2">{error}</p>
+                <p className="text-sm text-red-600 bg-amber-50 border border-red-200 rounded-lg px-4 py-2">{error}</p>
               )}
 
               <button
                 type="submit"
                 disabled={!agreed || submitting}
-                className={`btn-primary w-full justify-center py-3 text-base mt-2 ${!agreed || submitting ? 'opacity-60 cursor-not-allowed' : ''}`}
+                className={`w-full flex items-center justify-center gap-2 bg-amber-50 text-green-primary font-semibold py-3 rounded-lg hover:bg-amber-100 transition-colors text-base mt-2 ${!agreed || submitting ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 <CheckCircle2 className="w-5 h-5" />
-                {submitting ? 'Creating account…' : 'Join Tamamdır!'}
+                {submitting ? t('register.creating') : t('register.submit')}
               </button>
             </form>
-
-            <p className="text-center text-sm text-gray-500 mt-6">
-              Already have an account?{' '}
-              <Link to="/login" className="text-green-primary font-semibold hover:underline">
-                Login here
-              </Link>
-            </p>
           </div>
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="border-t border-gray-100 py-8 px-8">
-        <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-6 text-sm">
+      <footer className="w-full border-t border-amber-100 py-8 px-8 sm:px-16 lg:px-20 bg-amber-50">
+        <div className="w-full grid grid-cols-2 sm:grid-cols-4 gap-8 lg:gap-12 text-sm">
           <div>
-            <p className="font-semibold text-gray-900 mb-2">Tamamdır</p>
+            <TamamdirLogo className="h-10 mb-2" />
             <p className="text-gray-500 text-xs leading-relaxed">
-              The trusted marketplace for IYTE campus services. Efficiency and community combined.
+              {t('footer.iyteTagline')}
             </p>
           </div>
-          {[
-            { title: 'Platform', links: ['Browse Services', 'Become a Provider'] },
-            { title: 'Support', links: ['Campus Safety', 'Support Center'] },
-            { title: 'Legal', links: ['Privacy Policy', 'Terms of Use'] },
-          ].map((col) => (
-            <div key={col.title}>
-              <p className="font-semibold text-gray-900 mb-2 uppercase text-xs tracking-wide">{col.title}</p>
-              {col.links.map((l) => (
-                <p key={l} className="text-gray-500 hover:text-gray-700 cursor-pointer text-xs mb-1">{l}</p>
+          {footerCols.map((col) => (
+            <div key={col.titleKey}>
+              <p className="font-semibold text-coffee mb-2 uppercase text-xs tracking-wide">{t(col.titleKey)}</p>
+              {col.links.map((linkKey) => (
+                <p key={linkKey} className="text-gray-500 hover:text-gray-700 cursor-pointer text-xs mb-1">{t(linkKey)}</p>
               ))}
             </div>
           ))}
         </div>
-        <div className="max-w-7xl mx-auto mt-6 pt-6 border-t border-gray-100 text-xs text-gray-400 text-center">
-          © 2024 Tamamdır University Services. All rights reserved.
+        <div className="w-full mt-6 pt-6 border-t border-amber-100 text-xs text-gray-400">
+          {t('common.copyright')}
         </div>
       </footer>
     </div>

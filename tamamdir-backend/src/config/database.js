@@ -1,5 +1,3 @@
-const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
 const { Pool } = require('pg');
 
 let pool;
@@ -10,14 +8,6 @@ function toPostgres(sql) {
   return sql.replace(/\?/g, () => `$${++i}`);
 }
 
-function run(sql, params = []) {
-  try {
-    const stmt   = db.prepare(sql);
-    const result = stmt.run(...params);
-    return Promise.resolve({ lastID: result.lastInsertRowid, changes: result.changes });
-  } catch (err) {
-    return Promise.reject(err);
-  }
 async function run(sql, params = []) {
   const result = await pool.query(toPostgres(sql), params);
   return { rowCount: result.rowCount };
@@ -43,8 +33,9 @@ const SCHEMA_STATEMENTS = [
     bio              TEXT,
     department       TEXT,
     year             TEXT,
-    is_verified      INTEGER DEFAULT 0,
-    is_provider      INTEGER DEFAULT 0,
+    is_verified          INTEGER DEFAULT 0,
+    is_verified_student  INTEGER DEFAULT 0,
+    is_provider          INTEGER DEFAULT 0,
     wallet_balance   REAL DEFAULT 0.0,
     total_earnings   REAL DEFAULT 0.0,
     rating           REAL DEFAULT 0.0,
@@ -106,10 +97,10 @@ const SCHEMA_STATEMENTS = [
     id            TEXT PRIMARY KEY,
     participant_a TEXT NOT NULL REFERENCES users(id),
     participant_b TEXT NOT NULL REFERENCES users(id),
+    service_id    TEXT REFERENCES services(id),
     last_message  TEXT,
     last_msg_at   TIMESTAMPTZ,
-    created_at    TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE (participant_a, participant_b)
+    created_at    TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS messages (
     id              TEXT PRIMARY KEY,
@@ -119,12 +110,39 @@ const SCHEMA_STATEMENTS = [
     is_read         INTEGER DEFAULT 0,
     created_at      TIMESTAMPTZ DEFAULT NOW()
   )`,
+  `CREATE TABLE IF NOT EXISTS conversation_tamamdir (
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    service_id      TEXT NOT NULL REFERENCES services(id),
+    user_id         TEXT NOT NULL REFERENCES users(id),
+    confirmed_at    TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (conversation_id, service_id, user_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS conversation_service_arrangements (
+    conversation_id      TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    service_id           TEXT NOT NULL REFERENCES services(id),
+    cancel_count         INTEGER DEFAULT 0,
+    customer_cancel_count INTEGER DEFAULT 0,
+    provider_cancel_count INTEGER DEFAULT 0,
+    banned_until         TIMESTAMPTZ,
+    banned_user_id       TEXT REFERENCES users(id),
+    updated_at           TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (conversation_id, service_id)
+  )`,
   `CREATE TABLE IF NOT EXISTS reviews (
     id          TEXT PRIMARY KEY,
     order_id    TEXT NOT NULL UNIQUE REFERENCES orders(id),
     service_id  TEXT NOT NULL REFERENCES services(id),
     reviewer_id TEXT NOT NULL REFERENCES users(id),
     provider_id TEXT NOT NULL REFERENCES users(id),
+    rating      INTEGER NOT NULL,
+    comment     TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS user_reviews (
+    id          TEXT PRIMARY KEY,
+    order_id    TEXT NOT NULL UNIQUE REFERENCES orders(id),
+    reviewer_id TEXT NOT NULL REFERENCES users(id),
+    reviewee_id TEXT NOT NULL REFERENCES users(id),
     rating      INTEGER NOT NULL,
     comment     TEXT,
     created_at  TIMESTAMPTZ DEFAULT NOW()
@@ -139,6 +157,28 @@ const SCHEMA_STATEMENTS = [
     ref_id     TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
   )`,
+  `CREATE TABLE IF NOT EXISTS service_favorites (
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    service_id TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (user_id, service_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS email_verifications (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash  TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_email_verifications_user ON email_verifications(user_id)`,
+  `CREATE TABLE IF NOT EXISTS password_resets (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash  TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_services_provider ON services(provider_id)`,
   `CREATE INDEX IF NOT EXISTS idx_services_category ON services(category_id)`,
   `CREATE INDEX IF NOT EXISTS idx_orders_buyer      ON orders(buyer_id)`,
@@ -184,7 +224,124 @@ async function initDB() {
     await pool.query(stmt);
   }
 
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified_student INTEGER DEFAULT 0'
+  );
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active INTEGER DEFAULT 1'
+  );
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ'
+  );
+  await pool.query(
+    'ALTER TABLE conversations ADD COLUMN IF NOT EXISTS service_id TEXT REFERENCES services(id)'
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS conversation_service_arrangements (
+      conversation_id      TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      service_id           TEXT NOT NULL REFERENCES services(id),
+      cancel_count         INTEGER DEFAULT 0,
+      customer_cancel_count INTEGER DEFAULT 0,
+      provider_cancel_count INTEGER DEFAULT 0,
+      banned_until         TIMESTAMPTZ,
+      banned_user_id       TEXT REFERENCES users(id),
+      updated_at           TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (conversation_id, service_id)
+    )
+  `);
+  await pool.query(
+    'ALTER TABLE conversation_service_arrangements ADD COLUMN IF NOT EXISTS customer_cancel_count INTEGER DEFAULT 0'
+  );
+  await pool.query(
+    'ALTER TABLE conversation_service_arrangements ADD COLUMN IF NOT EXISTS provider_cancel_count INTEGER DEFAULT 0'
+  );
+  await pool.query(`
+    UPDATE conversation_service_arrangements
+    SET customer_cancel_count = cancel_count
+    WHERE customer_cancel_count = 0 AND cancel_count > 0
+  `);
+  await pool.query(`
+    UPDATE users SET is_verified_student = 1
+    WHERE is_verified_student = 0
+      AND (
+        LOWER(email) LIKE '%@iyte.edu.tr'
+        OR LOWER(email) LIKE '%@std.iyte.edu.tr'
+      )
+  `);
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_rating REAL DEFAULT 0.0'
+  );
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_review_count INTEGER DEFAULT 0'
+  );
+  await pool.query(
+    "ALTER TABLE services ADD COLUMN IF NOT EXISTS location_type TEXT DEFAULT 'on_campus'"
+  );
+  await pool.query(
+    "UPDATE services SET location_type = 'gulbahce' WHERE location_type = 'near_campus'"
+  );
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INTEGER DEFAULT 0'
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS reports (
+      id          TEXT PRIMARY KEY,
+      reporter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      target_type TEXT NOT NULL,
+      target_id   TEXT NOT NULL,
+      reason      TEXT NOT NULL,
+      details     TEXT,
+      status      TEXT NOT NULL DEFAULT 'pending',
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, created_at DESC)'
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_blocks (
+      blocker_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      blocked_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (blocker_id, blocked_id),
+      CHECK (blocker_id != blocked_id)
+    )
+  `);
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked ON user_blocks(blocked_id)'
+  );
+
+  // Allow multiple conversations per pair (one per service)
+  await pool.query(`
+    DO $$ BEGIN
+      ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_participant_a_participant_b_key;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END $$;
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS conversations_pair_service_unique
+    ON conversations (participant_a, participant_b, service_id)
+    WHERE service_id IS NOT NULL
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS conversations_pair_legacy_unique
+    ON conversations (participant_a, participant_b)
+    WHERE service_id IS NULL
+  `);
+
   await seed();
+
+  const { v4: uuidv4 } = require('uuid');
+  for (const c of [
+    { name: 'Teaching & Tutoring', icon: 'school',     slug: 'teaching-tutoring' },
+    { name: 'Other',               icon: 'more_horiz', slug: 'others'            },
+  ]) {
+    await pool.query(
+      'INSERT INTO categories (id,name,icon,slug) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING',
+      [uuidv4(), c.name, c.icon, c.slug]
+    );
+  }
+
   console.log(`📦  PostgreSQL connected: ${process.env.DATABASE_URL}`);
 }
 

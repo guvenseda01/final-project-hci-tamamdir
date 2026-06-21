@@ -1,14 +1,23 @@
+export interface UserInterest {
+  id: string;
+  name: string;
+  icon?: string;
+  slug?: string;
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
   department: string;
   year: string;
+  bio: string;
   avatar: string;
   verified: boolean;
   rating: number;
   completedServices: number;
   activeServices: number;
+  interests: UserInterest[];
 }
 
 export interface Service {
@@ -25,7 +34,11 @@ export interface Service {
   providerVerified: boolean;
   rating: number;
   reviewCount: number;
+  orderCount: number;
+  priceUnit: string;
+  coverImageId?: string;
   image: string;
+  images?: string[];
   tags: string[];
   deliveryDays: number;
   location: string;
@@ -54,7 +67,7 @@ export interface Conversation {
   id: string;
   participantId: string;
   participantName: string;
-  participantAvatar: string;
+  participantAvatar: string | null;
   lastMessage: string;
   lastTime: string;
   unread: boolean;
@@ -63,11 +76,14 @@ export interface Conversation {
 
 export interface ServiceHistory {
   id: string;
+  serviceId: string;
   serviceTitle: string;
   amount: string;
   partnerName: string;
   partnerAvatar: string;
-  status: "completed" | "pending" | "cancelled";
+  status: "completed" | "pending" | "cancelled" | "accepted" | "in_progress";
   date: string;
   type: "requested" | "provided";
+  hasReview: boolean;
+  note?: string;
 }
