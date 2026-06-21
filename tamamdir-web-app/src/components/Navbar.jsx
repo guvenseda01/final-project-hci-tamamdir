@@ -1,12 +1,41 @@
 import { Link, useLocation } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
 import { Bell, Mail, Search } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
 import TamamdirLogo from './TamamdirLogo'
+import api from '../lib/api'
+import { getSocket } from '../lib/socket'
 
 export default function Navbar() {
   const location = useLocation()
   const { user } = useAuth()
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  const refreshUnreadCount = useCallback(() => {
+    api.get('/api/notifications/unread-count')
+      .then(data => setUnreadCount(data.count ?? 0))
+      .catch(() => setUnreadCount(0))
+  }, [])
+
+  useEffect(() => {
+    if (!user) return
+    refreshUnreadCount()
+
+    const socket = getSocket()
+    if (!socket) return
+
+    const onNewNotification = () => refreshUnreadCount()
+    socket.on('notification:new', onNewNotification)
+
+    return () => socket.off('notification:new', onNewNotification)
+  }, [user?.id, refreshUnreadCount])
+
+  useEffect(() => {
+    if (location.pathname === '/notifications') {
+      setUnreadCount(0)
+    }
+  }, [location.pathname])
 
   const links = [
     { to: '/home', label: 'Home' },
@@ -59,7 +88,11 @@ export default function Navbar() {
             aria-label="Notifications"
           >
             <Bell className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-400 rounded-full" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </Link>
 
           <Link

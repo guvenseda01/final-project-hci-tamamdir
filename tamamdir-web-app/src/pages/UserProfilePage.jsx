@@ -6,6 +6,15 @@ import ServiceCard from '../components/ServiceCard'
 import api from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 
+function formatReviewDate(dateStr) {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
 function ProfileSkeleton() {
   return (
     <div className="animate-pulse space-y-6">
@@ -33,6 +42,7 @@ export default function UserProfilePage() {
 
   const [profile, setProfile] = useState(null)
   const [services, setServices] = useState([])
+  const [customerReviews, setCustomerReviews] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -46,10 +56,12 @@ export default function UserProfilePage() {
     Promise.all([
       api.get(`/api/users/${id}`),
       api.get(`/api/users/${id}/services`),
+      api.get(`/api/reviews/about-user/${id}`),
     ])
-      .then(([user, svcList]) => {
+      .then(([user, svcList, reviews]) => {
         if (cancelled) return
         setProfile(user)
+        setCustomerReviews(reviews)
         setServices(svcList.map(s => ({
           ...s,
           provider_name: user.full_name,
@@ -70,6 +82,9 @@ export default function UserProfilePage() {
   if (currentUser?.id === id) {
     return <Navigate to="/profile" replace />
   }
+
+  const customerReviewCount = profile?.customer_review_count ?? 0
+  const providerReviewCount = profile?.review_count ?? 0
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -137,19 +152,31 @@ export default function UserProfilePage() {
                   )}
 
                   <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 mt-4">
-                    <div className="flex items-center gap-1.5 text-sm text-gray-600">
-                      <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-                      {profile.review_count > 0 ? (
+                    {customerReviewCount > 0 && (
+                      <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                        <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                        <span>
+                          <span className="font-semibold text-gray-900">
+                            {Number(profile.customer_rating).toFixed(1)}
+                          </span>
+                          {' '}({customerReviewCount} review{customerReviewCount !== 1 ? 's' : ''} from providers)
+                        </span>
+                      </div>
+                    )}
+                    {providerReviewCount > 0 && (
+                      <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                        <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
                         <span>
                           <span className="font-semibold text-gray-900">
                             {Number(profile.rating).toFixed(1)}
                           </span>
-                          {' '}({profile.review_count} reviews)
+                          {' '}({providerReviewCount} review{providerReviewCount !== 1 ? 's' : ''} on services)
                         </span>
-                      ) : (
-                        <span className="text-gray-400">No reviews yet</span>
-                      )}
-                    </div>
+                      </div>
+                    )}
+                    {customerReviewCount === 0 && providerReviewCount === 0 && (
+                      <span className="text-sm text-gray-400">No reviews yet</span>
+                    )}
                     <span className="text-gray-300 hidden sm:inline">•</span>
                     <span className="text-sm text-gray-500">
                       {services.length} active service{services.length !== 1 ? 's' : ''}
@@ -158,6 +185,60 @@ export default function UserProfilePage() {
                 </div>
               </div>
             </div>
+
+            {customerReviews.length > 0 && (
+              <section className="mb-10">
+                <h2 className="text-xl font-bold text-gray-900 mb-1">
+                  Reviews from providers
+                  <span className="text-gray-400 font-normal text-base ml-2">
+                    ({customerReviews.length})
+                  </span>
+                </h2>
+                <p className="text-sm text-gray-500 mb-6">
+                  Feedback left by service providers after a completed arrangement.
+                </p>
+                <div className="card divide-y divide-gray-100">
+                  {customerReviews.map(review => (
+                    <div key={review.id} className="p-5 flex gap-4">
+                      {review.reviewer_avatar ? (
+                        <img
+                          src={review.reviewer_avatar}
+                          alt={review.reviewer_name}
+                          className="w-10 h-10 rounded-full object-cover shrink-0 border border-gray-100"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-green-pale flex items-center justify-center shrink-0">
+                          <span className="text-green-primary font-bold text-sm">
+                            {review.reviewer_name?.[0] ?? '?'}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
+                          <span className="font-semibold text-sm text-gray-900">
+                            {review.reviewer_name}
+                          </span>
+                          <div className="flex items-center gap-0.5">
+                            {[...Array(review.rating)].map((_, i) => (
+                              <Star key={i} className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
+                            ))}
+                          </div>
+                          <span className="text-xs text-gray-400">
+                            {formatReviewDate(review.created_at)}
+                          </span>
+                        </div>
+                        {review.service_title && (
+                          <p className="text-xs text-gray-400 mb-1">{review.service_title}</p>
+                        )}
+                        {review.comment && (
+                          <p className="text-sm text-gray-600">{review.comment}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <section>
               <h2 className="text-xl font-bold text-gray-900 mb-6">
