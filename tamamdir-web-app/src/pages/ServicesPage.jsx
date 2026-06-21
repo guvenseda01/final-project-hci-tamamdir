@@ -4,6 +4,8 @@ import { AlertCircle } from 'lucide-react'
 import ServiceCard from '../components/ServiceCard'
 import api from '../lib/api'
 import { cn, LOCATION_OPTIONS } from '../lib/utils'
+import { usePreferences } from '../context/PreferencesContext'
+import { tCategory } from '../lib/i18n'
 
 const SORT_MAP = {
   rating:     'rating',
@@ -36,6 +38,7 @@ function ServiceCardSkeleton() {
 }
 
 export default function ServicesPage() {
+  const { t } = usePreferences()
   const [searchParams, setSearchParams] = useSearchParams()
   const filterByInterests = searchParams.get('interests') === '1'
   const searchQuery = searchParams.get('q')?.trim() ?? ''
@@ -50,12 +53,10 @@ export default function ServicesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  // Fetch categories once
   useEffect(() => {
     api.get('/api/categories').then(data => setCategories(data)).catch(() => {})
   }, [])
 
-  // Fetch services — instant for category/sort
   useEffect(() => {
     let cancelled = false
 
@@ -75,7 +76,7 @@ export default function ServicesPage() {
         const data = await api.get(`/api/services?${params}`)
         if (!cancelled) setServices(data.services)
       } catch (err) {
-        if (!cancelled) setError(err.message || 'Failed to load services.')
+        if (!cancelled) setError(err.message || t('services.loadFailed'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -83,7 +84,7 @@ export default function ServicesPage() {
 
     run()
     return () => { cancelled = true }
-  }, [activeCategory, activeLocation, filterByInterests, searchQuery, minPrice, maxPrice])
+  }, [activeCategory, activeLocation, filterByInterests, searchQuery, minPrice, maxPrice, t])
 
   const setLocationFilter = (value) => {
     setSearchParams(prev => {
@@ -104,28 +105,31 @@ export default function ServicesPage() {
     }, { replace: true })
   }
 
+  const locationLabel = activeLocation
+    ? t(`location.${activeLocation}`)
+    : t('services.thisLocation')
+
   return (
     <div className="min-h-screen bg-amber-50">
       <main className="w-full px-4 sm:px-6 lg:px-8 pt-4 pb-10">
         <div className="mb-4 w-full">
-          <h1 className="text-3xl font-bold text-coffee mb-1">Marketplace</h1>
+          <h1 className="text-3xl font-bold text-coffee mb-1">{t('services.title')}</h1>
           <p className="text-gray-500 text-sm">
             {searchQuery
-              ? `Results for “${searchQuery}”.`
+              ? t('services.resultsFor', { query: searchQuery })
               : filterByInterests
-                ? 'Services matching your interests.'
-                : 'Find the perfect campus service from your peers.'}
+                ? t('services.matchingInterests')
+                : t('services.defaultSubtitle')}
           </p>
         </div>
 
-        {/* Location pills */}
         <div className="flex gap-2 flex-wrap mb-3">
           <button
             type="button"
             onClick={() => setLocationFilter('')}
             className={filterPillClass(activeLocation === '')}
           >
-            All locations
+            {t('services.allLocations')}
           </button>
           {LOCATION_OPTIONS.map(opt => (
             <button
@@ -134,12 +138,11 @@ export default function ServicesPage() {
               onClick={() => setLocationFilter(opt.value)}
               className={filterPillClass(activeLocation === opt.value)}
             >
-              {opt.label}
+              {t(`location.${opt.value}`)}
             </button>
           ))}
         </div>
 
-        {/* Category pills */}
         {categories.length > 0 && (
           <div className="flex gap-2 flex-wrap mb-6">
             <button
@@ -147,7 +150,7 @@ export default function ServicesPage() {
               onClick={() => setActiveCategory('')}
               className={filterPillClass(activeCategory === '')}
             >
-              All
+              {t('common.all')}
             </button>
             {categories.map(cat => (
               <button
@@ -156,16 +159,15 @@ export default function ServicesPage() {
                 onClick={() => setActiveCategory(cat.slug)}
                 className={filterPillClass(activeCategory === cat.slug)}
               >
-                {cat.name}
+                {tCategory(t, cat)}
               </button>
             ))}
           </div>
         )}
 
-        {/* Price range */}
         <div className="flex flex-wrap items-end gap-3 mb-6">
           <div>
-            <label htmlFor="min-price" className="block text-xs font-medium text-gray-500 mb-1">Min price (₺)</label>
+            <label htmlFor="min-price" className="block text-xs font-medium text-gray-500 mb-1">{t('services.minPrice')}</label>
             <input
               id="min-price"
               type="number"
@@ -177,12 +179,12 @@ export default function ServicesPage() {
             />
           </div>
           <div>
-            <label htmlFor="max-price" className="block text-xs font-medium text-gray-500 mb-1">Max price (₺)</label>
+            <label htmlFor="max-price" className="block text-xs font-medium text-gray-500 mb-1">{t('services.maxPrice')}</label>
             <input
               id="max-price"
               type="number"
               min="0"
-              placeholder="Any"
+              placeholder={t('services.any')}
               value={maxPrice}
               onChange={e => setPriceFilter('max_price', e.target.value)}
               className="w-28 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-coffee outline-none focus:border-green-primary focus:ring-1 focus:ring-green-primary"
@@ -199,12 +201,11 @@ export default function ServicesPage() {
               }, { replace: true })}
               className="text-sm font-medium text-green-primary hover:underline pb-2"
             >
-              Clear price
+              {t('services.clearPrice')}
             </button>
           )}
         </div>
 
-        {/* Error */}
         {error && (
           <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 mb-6">
             <AlertCircle className="w-5 h-5 shrink-0" />
@@ -212,7 +213,6 @@ export default function ServicesPage() {
           </div>
         )}
 
-        {/* Results */}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-4 gap-y-8 w-full">
             {Array.from({ length: 10 }).map((_, i) => <ServiceCardSkeleton key={i} />)}
@@ -225,13 +225,13 @@ export default function ServicesPage() {
           <div className="text-center py-20">
             <p className="text-gray-400 text-lg font-medium">
               {searchQuery
-                ? `No results for “${searchQuery}”`
+                ? t('services.noResultsFor', { query: searchQuery })
                 : activeLocation
-                  ? `No services in ${LOCATION_OPTIONS.find(o => o.value === activeLocation)?.label ?? 'this location'}`
-                  : 'No services found'}
+                  ? t('services.noServicesInLocation', { location: locationLabel })
+                  : t('services.noServicesFound')}
             </p>
             <p className="text-gray-300 text-sm mt-1">
-              {searchQuery ? 'Try a different search term or clear filters.' : 'Try a different category or location'}
+              {searchQuery ? t('services.tryDifferentSearch') : t('services.tryDifferentFilter')}
             </p>
           </div>
         )}

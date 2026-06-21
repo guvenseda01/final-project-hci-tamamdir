@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../context/AuthContext'
+import { usePreferences } from '../context/PreferencesContext'
+import { tCategory } from '../lib/i18n'
 
 const EMOJI = {
   code:              '💻',
@@ -27,6 +29,7 @@ export default function OnboardingPage() {
   const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
   const { user, me } = useAuth()
+  const { t } = usePreferences()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const isFromProfile = searchParams.get('from') === 'profile'
@@ -34,9 +37,9 @@ export default function OnboardingPage() {
   useEffect(() => {
     api.get('/api/categories')
       .then(data => setCategories(data))
-      .catch(() => setFetchError('Could not load categories. Check your connection and refresh.'))
+      .catch(() => setFetchError(t('onboarding.fetchFailed')))
       .finally(() => setLoadingCats(false))
-  }, [])
+  }, [t])
 
   useEffect(() => {
     if (!user?.interests?.length) return
@@ -72,21 +75,24 @@ export default function OnboardingPage() {
         navigate('/home')
       }
     } catch (err) {
-      setSaveError(err.message || 'Failed to save interests. Please try again.')
+      setSaveError(err.message || t('onboarding.saveFailed'))
       setSaving(false)
     }
   }
+
+  const interestsLabel = selected.size === 1
+    ? t('onboarding.interestsSelected_one', { count: selected.size })
+    : t('onboarding.interestsSelected', { count: selected.size })
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-amber-50">
       <div className="flex-1 flex flex-col w-full px-4 sm:px-6 lg:px-10 xl:px-14 pt-6 sm:pt-8 pb-28 min-h-0">
         <div className="mb-4 sm:mb-6 shrink-0">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-green-primary mb-2">
-            {isFromProfile ? 'Update Your Interests' : "Tell Us What You're Into"}
+            {isFromProfile ? t('onboarding.titleUpdate') : t('onboarding.title')}
           </h1>
           <p className="text-gray-500 text-sm sm:text-base max-w-3xl">
-            Personalize your experience by selecting your interests. This helps us suggest
-            the best campus services tailored just for you.
+            {t('onboarding.subtitle')}
           </p>
         </div>
 
@@ -132,7 +138,7 @@ export default function OnboardingPage() {
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 sm:p-4">
                     <span className="text-3xl sm:text-4xl lg:text-5xl select-none">{emoji}</span>
                     <p className="text-coffee font-semibold text-xs sm:text-sm lg:text-base text-center leading-tight">
-                      {cat.name}
+                      {tCategory(t, cat)}
                     </p>
                   </div>
                 </button>
@@ -151,14 +157,14 @@ export default function OnboardingPage() {
         )}
         <div className="flex items-center justify-end gap-3">
           <span className="text-sm text-gray-400 mr-auto">
-            {selected.size} interest{selected.size !== 1 ? 's' : ''} selected
+            {interestsLabel}
           </span>
           {!isFromProfile ? null : (
             <button
               onClick={handleCancel}
               className="text-sm text-gray-500 font-medium hover:text-gray-700 px-4 py-2.5"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           )}
           <button
@@ -171,7 +177,7 @@ export default function OnboardingPage() {
             ) : (
               <CheckCircle2 className="w-4 h-4" />
             )}
-            {saving ? 'Saving…' : isFromProfile ? 'Save' : 'Continue'}
+            {saving ? t('onboarding.saving') : isFromProfile ? t('onboarding.save') : t('common.continue')}
           </button>
         </div>
       </div>

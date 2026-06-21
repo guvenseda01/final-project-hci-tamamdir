@@ -6,6 +6,7 @@ import ReportModal from '../components/ReportModal'
 import api from '../lib/api'
 import { resolveMediaUrl } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
+import { usePreferences } from '../context/PreferencesContext'
 
 function formatReviewDate(dateStr) {
   if (!dateStr) return ''
@@ -40,6 +41,7 @@ export default function UserProfilePage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user: currentUser } = useAuth()
+  const { t } = usePreferences()
 
   const [profile, setProfile] = useState(null)
   const [services, setServices] = useState([])
@@ -69,7 +71,7 @@ export default function UserProfilePage() {
         setIsBlocked(true)
       }
     } catch (err) {
-      setError(err.message || 'Failed to update block status.')
+      setError(err.message || t('userProfile.blockFailed'))
     } finally {
       setBlockBusy(false)
     }
@@ -100,7 +102,7 @@ export default function UserProfilePage() {
       })
       .catch(err => {
         if (!cancelled) {
-          setError(err.status === 404 ? 'User not found.' : (err.message || 'Failed to load profile.'))
+          setError(err.status === 404 ? t('userProfile.userNotFound') : (err.message || t('userProfile.loadFailed')))
         }
       })
       .finally(() => { if (!cancelled) setLoading(false) })
@@ -123,7 +125,7 @@ export default function UserProfilePage() {
           className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back
+          {t('common.back')}
         </button>
 
         {loading && <ProfileSkeleton />}
@@ -133,7 +135,7 @@ export default function UserProfilePage() {
             <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
             <p className="text-gray-700 font-semibold text-lg mb-2">{error}</p>
             <Link to="/services" className="btn-primary mt-4 inline-flex">
-              Browse Services
+              {t('userProfile.browseServices')}
             </Link>
           </div>
         )}
@@ -175,7 +177,7 @@ export default function UserProfilePage() {
                           className="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-gray-500 hover:text-red-600 disabled:opacity-60"
                         >
                           <Ban className="w-4 h-4" />
-                          {isBlocked ? 'Unblock' : 'Block'}
+                          {isBlocked ? t('common.unblock') : t('common.block')}
                         </button>
                       )}
                       <button
@@ -184,7 +186,7 @@ export default function UserProfilePage() {
                         className="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-gray-500 hover:text-red-600 shrink-0"
                       >
                         <Flag className="w-4 h-4" />
-                        Report
+                        {t('common.report')}
                       </button>
                     </div>
                   </div>
@@ -194,7 +196,7 @@ export default function UserProfilePage() {
                   {profile.is_verified_student && (
                     <div className="inline-flex items-center gap-1.5 bg-green-pale text-green-primary text-xs font-semibold px-3 py-1 rounded-full mb-3">
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      Verified Student
+                      {t('userProfile.verifiedStudent')}
                     </div>
                   )}
                   {profile.bio && (
@@ -209,7 +211,7 @@ export default function UserProfilePage() {
                           <span className="font-semibold text-gray-600">
                             {Number(profile.customer_rating).toFixed(1)}
                           </span>
-                          {' '}({customerReviewCount} review{customerReviewCount !== 1 ? 's' : ''} from providers)
+                          {' '}({t('userProfile.reviewsFromProviders', { count: customerReviewCount })})
                         </span>
                       </div>
                     )}
@@ -220,16 +222,16 @@ export default function UserProfilePage() {
                           <span className="font-semibold text-gray-600">
                             {Number(profile.rating).toFixed(1)}
                           </span>
-                          {' '}({providerReviewCount} review{providerReviewCount !== 1 ? 's' : ''} on services)
+                          {' '}({t('userProfile.reviewsOnServices', { count: providerReviewCount })})
                         </span>
                       </div>
                     )}
                     {customerReviewCount === 0 && providerReviewCount === 0 && (
-                      <span className="text-sm text-gray-400">No reviews yet</span>
+                      <span className="text-sm text-gray-400">{t('userProfile.noReviewsYet')}</span>
                     )}
                     <span className="text-gray-300 hidden sm:inline">•</span>
                     <span className="text-sm text-gray-500">
-                      {services.length} active service{services.length !== 1 ? 's' : ''}
+                      {t('userProfile.activeServices', { count: services.length })}
                     </span>
                   </div>
                 </div>
@@ -239,13 +241,13 @@ export default function UserProfilePage() {
             {customerReviews.length > 0 && (
               <section className="mb-10">
                 <h2 className="text-xl font-bold text-coffee mb-1">
-                  Reviews from providers
+                  {t('userProfile.reviewsFromProvidersTitle')}
                   <span className="text-gray-400 font-normal text-base ml-2">
                     ({customerReviews.length})
                   </span>
                 </h2>
                 <p className="text-sm text-gray-500 mb-6">
-                  Feedback left by service providers after a completed arrangement.
+                  {t('userProfile.reviewsFromProvidersDesc')}
                 </p>
                 <div className="card divide-y divide-gray-100">
                   {customerReviews.map(review => (
@@ -292,11 +294,11 @@ export default function UserProfilePage() {
 
             <section>
               <h2 className="text-xl font-bold text-coffee mb-6">
-                Services by {profile.full_name?.split(' ')[0]}
+                {t('userProfile.servicesBy', { name: profile.full_name?.split(' ')[0] })}
               </h2>
               {services.length === 0 ? (
                 <p className="text-gray-400 text-sm text-center py-12 card">
-                  This provider hasn&apos;t listed any services yet.
+                  {t('userProfile.noServicesListed')}
                 </p>
               ) : (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">

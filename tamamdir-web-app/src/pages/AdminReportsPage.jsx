@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Shield, Flag, Loader2, AlertCircle, ExternalLink } from 'lucide-react'
 import { cn } from '../lib/utils'
 import api from '../lib/api'
+import { usePreferences } from '../context/PreferencesContext'
 
 const STATUS_STYLES = {
   pending: 'bg-amber-100 text-amber-800 border-amber-200',
@@ -29,6 +30,7 @@ function targetLink(report) {
 }
 
 export default function AdminReportsPage() {
+  const { t } = usePreferences()
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -39,7 +41,7 @@ export default function AdminReportsPage() {
     setError('')
     api.get('/api/admin/reports')
       .then(setReports)
-      .catch(err => setError(err.message || 'Failed to load reports.'))
+      .catch(err => setError(err.message || t('admin.loadFailed')))
       .finally(() => setLoading(false))
   }
 
@@ -51,7 +53,7 @@ export default function AdminReportsPage() {
       await api.patch(`/api/admin/reports/${id}`, { status })
       setReports(prev => prev.map(r => (r.id === id ? { ...r, status } : r)))
     } catch (err) {
-      setError(err.message || 'Failed to update report.')
+      setError(err.message || t('admin.updateFailed'))
     } finally {
       setUpdatingId(null)
     }
@@ -71,7 +73,7 @@ export default function AdminReportsPage() {
       await api.patch(`/api/admin/reports/${report.id}`, { status: 'reviewed' })
       setReports(prev => prev.map(r => (r.id === report.id ? { ...r, status: 'reviewed' } : r)))
     } catch (err) {
-      setError(err.message || 'Moderation action failed.')
+      setError(err.message || t('admin.moderationFailed'))
     } finally {
       setUpdatingId(null)
     }
@@ -87,9 +89,9 @@ export default function AdminReportsPage() {
             <Shield className="w-6 h-6 text-green-primary" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-coffee mb-1">Admin — Reports</h1>
+            <h1 className="text-3xl font-bold text-coffee mb-1">{t('admin.title')}</h1>
             <p className="text-gray-500 text-sm">
-              Review user-submitted reports from services, profiles, and conversations.
+              {t('admin.subtitle')}
             </p>
           </div>
         </div>
@@ -98,17 +100,17 @@ export default function AdminReportsPage() {
           <div className="grid grid-cols-3 gap-4 mb-8">
             <div className="card p-4 text-center">
               <p className="text-2xl font-bold text-coffee">{reports.length}</p>
-              <p className="text-xs text-gray-400 mt-1">Total</p>
+              <p className="text-xs text-gray-400 mt-1">{t('common.total')}</p>
             </div>
             <div className="card p-4 text-center">
               <p className="text-2xl font-bold text-amber-700">{pendingCount}</p>
-              <p className="text-xs text-gray-400 mt-1">Pending</p>
+              <p className="text-xs text-gray-400 mt-1">{t('common.pending')}</p>
             </div>
             <div className="card p-4 text-center">
               <p className="text-2xl font-bold text-green-primary">
                 {reports.filter(r => r.status === 'reviewed').length}
               </p>
-              <p className="text-xs text-gray-400 mt-1">Reviewed</p>
+              <p className="text-xs text-gray-400 mt-1">{t('common.reviewed')}</p>
             </div>
           </div>
         )}
@@ -127,7 +129,7 @@ export default function AdminReportsPage() {
         ) : reports.length === 0 ? (
           <div className="card p-12 text-center">
             <Flag className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">No reports yet</p>
+            <p className="text-gray-500 font-medium">{t('admin.noReports')}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -142,17 +144,17 @@ export default function AdminReportsPage() {
                           'text-xs font-semibold px-2.5 py-0.5 rounded-full border capitalize',
                           STATUS_STYLES[report.status] ?? STATUS_STYLES.pending
                         )}>
-                          {report.status}
+                          {t(`admin.status.${report.status}`)}
                         </span>
                         <span className="text-xs text-gray-400 uppercase tracking-wide">
-                          {report.target_type}
+                          {t(`admin.target.${report.target_type}`)}
                         </span>
                       </div>
                       <h2 className="font-semibold text-coffee">
                         {report.target_label || report.target_id}
                       </h2>
                       <p className="text-sm text-gray-500 mt-0.5">
-                        Reported by {report.reporter_name} · {formatDate(report.created_at)}
+                        {t('admin.reportedBy', { name: report.reporter_name, date: formatDate(report.created_at) })}
                       </p>
                     </div>
                     {href && (
@@ -160,7 +162,7 @@ export default function AdminReportsPage() {
                         to={href}
                         className="inline-flex items-center gap-1 text-sm text-green-primary hover:underline shrink-0"
                       >
-                        View target
+                        {t('admin.viewTarget')}
                         <ExternalLink className="w-3.5 h-3.5" />
                       </Link>
                     )}
@@ -181,7 +183,7 @@ export default function AdminReportsPage() {
                         onClick={() => moderate(report, 'hide_service')}
                         className="text-xs font-semibold bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 disabled:opacity-60"
                       >
-                        Hide service
+                        {t('admin.hideService')}
                       </button>
                     )}
                     {report.target_user_id && (
@@ -191,7 +193,7 @@ export default function AdminReportsPage() {
                         onClick={() => moderate(report, 'suspend_user')}
                         className="text-xs font-semibold bg-amber-700 text-white px-3 py-1.5 rounded-lg hover:bg-amber-800 disabled:opacity-60"
                       >
-                        Suspend user
+                        {t('admin.suspendUser')}
                       </button>
                     )}
                     {report.status !== 'reviewed' && (
@@ -201,7 +203,7 @@ export default function AdminReportsPage() {
                         onClick={() => updateStatus(report.id, 'reviewed')}
                         className="text-xs font-semibold bg-green-primary text-white px-3 py-1.5 rounded-lg hover:bg-green-dark disabled:opacity-60"
                       >
-                        Mark reviewed
+                        {t('admin.markReviewed')}
                       </button>
                     )}
                     {report.status !== 'dismissed' && (
@@ -211,7 +213,7 @@ export default function AdminReportsPage() {
                         onClick={() => updateStatus(report.id, 'dismissed')}
                         className="text-xs font-semibold border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-60"
                       >
-                        Dismiss
+                        {t('admin.dismiss')}
                       </button>
                     )}
                     {report.status !== 'pending' && (
@@ -221,7 +223,7 @@ export default function AdminReportsPage() {
                         onClick={() => updateStatus(report.id, 'pending')}
                         className="text-xs font-semibold border border-amber-200 text-coffee px-3 py-1.5 rounded-lg hover:bg-amber-50 disabled:opacity-60"
                       >
-                        Reopen
+                        {t('admin.reopen')}
                       </button>
                     )}
                   </div>

@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Mail, Loader2, ArrowLeft } from 'lucide-react'
 import api from '../lib/api'
+import { usePreferences } from '../context/PreferencesContext'
 import TamamdirLogo from '../components/TamamdirLogo'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const { t } = usePreferences()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
@@ -24,23 +26,26 @@ export default function ForgotPasswordPage() {
       })
     } catch (err) {
       const apiErrors = err.data?.errors
-      setError(apiErrors ? apiErrors[0].msg : (err.message || 'Could not send reset code.'))
+      setError(apiErrors ? apiErrors[0].msg : (err.message || t('forgot.failed')))
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-amber-50">
-      <div className="flex flex-1">
-        <div className="hidden lg:flex lg:w-1/2 bg-amber-50 flex-col justify-between p-12 relative overflow-hidden border-r border-amber-100">
-          <div className="relative z-10">
-            <TamamdirLogo className="h-[66px] mb-16" />
+    <div className="bg-amber-50">
+      <div className="min-h-screen flex">
+        <div className="hidden lg:flex lg:w-1/2 bg-amber-50 flex-col p-12 relative overflow-hidden border-r border-amber-100">
+          <div className="relative z-10 shrink-0">
+            <TamamdirLogo className="h-[66px]" />
+          </div>
+
+          <div className="relative z-10 flex-1 flex flex-col justify-center py-8">
             <h2 className="text-4xl font-bold text-coffee leading-tight mb-4">
-              Reset your password securely
+              {t('forgot.heroTitle')}
             </h2>
             <p className="text-gray-600 text-lg">
-              We&apos;ll send a 6-digit code to your email so you can choose a new password.
+              {t('forgot.heroDesc')}
             </p>
           </div>
         </div>
@@ -59,27 +64,27 @@ export default function ForgotPasswordPage() {
               className="inline-flex items-center gap-2 text-sm text-green-light hover:text-white font-medium mb-8"
             >
               <ArrowLeft className="w-4 h-4" />
-              Back to login
+              {t('forgot.backToLogin')}
             </Link>
 
             <div className="mb-8">
-              <h1 className="text-3xl font-bold text-white mb-2">Forgot password?</h1>
+              <h1 className="text-3xl font-bold text-white mb-2">{t('forgot.title')}</h1>
               <p className="text-green-light">
-                Enter your email address and we&apos;ll send you a 6-digit code to reset your password.
+                {t('forgot.subtitle')}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-white mb-1.5">
-                  Email Address
+                  {t('common.emailAddress')}
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="email"
                     required
-                    placeholder="student@iyte.edu.tr"
+                    placeholder={t('login.emailPlaceholder')}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="input-field pl-10 bg-amber-50 border-amber-100"
@@ -99,10 +104,10 @@ export default function ForgotPasswordPage() {
                 {submitting ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Sending…
+                    {t('common.sending')}
                   </>
                 ) : (
-                  'Send reset code'
+                  t('forgot.sendCode')
                 )}
               </button>
             </form>
