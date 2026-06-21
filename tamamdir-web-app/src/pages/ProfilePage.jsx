@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
-  CheckCircle2, User, Sliders, Wrench, Shield, Settings,
+  CheckCircle2, Sliders, Shield, Settings,
   HelpCircle, LogOut, Trash2, Eye, EyeOff, Plus, AlertTriangle,
-  Loader2, ShoppingBag, AlertCircle, Camera, X,
+  Loader2, ShoppingBag, AlertCircle, Camera, X, ArchiveRestore,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import api from '../lib/api'
-import { formatPrice, resolveMediaUrl } from '../lib/utils'
+import { formatPrice, resolveMediaUrl, cn } from '../lib/utils'
+import { PROFILE_TABS } from '../constants/profileNav'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -243,37 +244,114 @@ function PersonalInfo({ user, onAvatarUpdated, onProfileUpdated }) {
 function ServiceManagement({ userId }) {
   const [services, setServices] = useState([])
   const [loading, setLoading] = useState(true)
-  const [confirmRemove, setConfirmRemove] = useState(null)
-  const [removing, setRemoving] = useState(false)
-  const [removeError, setRemoveError] = useState('')
+  const [confirmArchive, setConfirmArchive] = useState(null)
+  const [updatingId, setUpdatingId] = useState(null)
+  const [actionError, setActionError] = useState('')
 
-  useEffect(() => {
+  const loadServices = () => {
     if (!userId) return
-    api.get(`/api/users/${userId}/services`)
+    setLoading(true)
+    api.get(`/api/users/${userId}/services?all=1`)
       .then(setServices)
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [userId])
-
-  const closeRemoveModal = () => {
-    if (removing) return
-    setConfirmRemove(null)
-    setRemoveError('')
   }
 
-  const handleConfirmRemove = async () => {
-    if (!confirmRemove) return
-    setRemoveError('')
-    setRemoving(true)
+  useEffect(() => {
+    loadServices()
+  }, [userId])
+
+  const sortedServices = [...services].sort((a, b) => {
+    const aActive = a.is_active !== 0 && a.is_active !== false
+    const bActive = b.is_active !== 0 && b.is_active !== false
+    if (aActive !== bActive) return aActive ? -1 : 1
+    return 0
+  })
+
+  const isServiceActive = (svc) => svc.is_active !== 0 && svc.is_active !== false
+
+  const closeArchiveModal = () => {
+    if (updatingId) return
+    setConfirmArchive(null)
+    setActionError('')
+  }
+
+  const setServiceActive = async (svc, isActive) => {
+    setActionError('')
+    setUpdatingId(svc.id)
     try {
-      await api.del(`/api/services/${confirmRemove.id}`)
-      setServices(prev => prev.filter(s => s.id !== confirmRemove.id))
-      setConfirmRemove(null)
+      await api.patch(`/api/services/${svc.id}`, { is_active: isActive })
+      setServices(prev => prev.map(s => (
+        s.id === svc.id ? { ...s, is_active: isActive ? 1 : 0 } : s
+      )))
+      setConfirmArchive(null)
     } catch (err) {
-      setRemoveError(err.message || 'Failed to remove service.')
+      setActionError(err.message || 'Failed to update service.')
     } finally {
-      setRemoving(false)
+      setUpdatingId(null)
     }
+  }
+
+  const renderServiceRow = (svc) => {
+    const active = isServiceActive(svc)
+    return (
+      <div
+        key={svc.id}
+        className={cn(
+          'flex items-center justify-between rounded-xl px-4 py-3.5',
+          active ? 'bg-gray-50' : 'bg-gray-50/60 border border-dashed border-gray-200 opacity-80'
+        )}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={cn(
+            'w-9 h-9 rounded-xl flex items-center justify-center shrink-0',
+            active ? 'bg-green-pale' : 'bg-gray-100'
+          )}>
+            <CheckCircle2 className={cn('w-4 h-4', active ? 'text-green-primary' : 'text-gray-400')} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className={cn('text-sm font-semibold truncate', active ? 'text-coffee' : 'text-gray-500')}>
+                {svc.title}
+              </p>
+              {!active && (
+                <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
+                  Archived
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400">
+              {svc.category_name} · {formatPrice(svc.price, svc.price_unit)}
+            </p>
+          </div>
+        </div>
+        {active ? (
+          <button
+            type="button"
+            onClick={() => setConfirmArchive(svc)}
+            disabled={updatingId === svc.id}
+            className="flex items-center gap-1.5 text-amber-700 hover:text-amber-900 text-sm font-medium transition-colors disabled:opacity-60 shrink-0 ml-3"
+          >
+            <Trash2 className="w-4 h-4" />
+            Archive
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setServiceActive(svc, true)}
+            disabled={updatingId === svc.id}
+            className="flex items-center gap-1.5 text-green-primary hover:text-green-dark text-sm font-medium transition-colors disabled:opacity-60 shrink-0 ml-3"
+          >
+            {updatingId === svc.id ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <ArchiveRestore className="w-4 h-4" />
+            )}
+            Unarchive
+          </button>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -286,8 +364,8 @@ function ServiceManagement({ userId }) {
       <div className="card p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-semibold text-coffee">Your Active Services</h3>
-            <p className="text-sm text-gray-400">These services are currently visible to other students.</p>
+            <h3 className="font-semibold text-coffee">Your Services</h3>
+            <p className="text-sm text-gray-400">Active listings are visible on the marketplace. Archived ones stay here — unarchive anytime.</p>
           </div>
           <Link
             to="/services/new"
@@ -304,32 +382,11 @@ function ServiceManagement({ userId }) {
           </div>
         ) : services.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">
-            You haven't listed any services yet.
+            You haven&apos;t listed any services yet.
           </p>
         ) : (
           <div className="space-y-3 mb-4">
-            {services.map(svc => (
-              <div key={svc.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3.5">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-green-pale rounded-xl flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="w-4 h-4 text-green-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-coffee">{svc.title}</p>
-                    <p className="text-xs text-gray-400">
-                      {svc.category_name} · {formatPrice(svc.price, svc.price_unit)}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setConfirmRemove(svc)}
-                  className="flex items-center gap-1.5 text-red-400 hover:text-red-600 text-sm font-medium transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Remove
-                </button>
-              </div>
-            ))}
+            {sortedServices.map(svc => renderServiceRow(svc))}
           </div>
         )}
 
@@ -353,42 +410,42 @@ function ServiceManagement({ userId }) {
         </svg>
       </button>
 
-      {confirmRemove && (
+      {confirmArchive && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-11 h-11 bg-red-50 rounded-xl flex items-center justify-center shrink-0">
-                <Trash2 className="w-5 h-5 text-red-400" />
+              <div className="w-11 h-11 bg-amber-50 rounded-xl flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-amber-600" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-coffee">Remove Service</h3>
-                <p className="text-sm text-gray-500 truncate">{confirmRemove.title}</p>
+                <h3 className="text-lg font-semibold text-coffee">Archive Service</h3>
+                <p className="text-sm text-gray-500 truncate">{confirmArchive.title}</p>
               </div>
             </div>
 
             <p className="text-sm text-gray-600 mb-5">
-              Are you sure you want to remove this service?
+              This hides the listing from the marketplace. It will stay in your list — use Unarchive to publish it again.
             </p>
 
-            {removeError && (
-              <p className="text-xs text-red-500 mb-4">{removeError}</p>
+            {actionError && (
+              <p className="text-xs text-red-500 mb-4">{actionError}</p>
             )}
 
             <div className="flex justify-end gap-3">
               <button
-                onClick={closeRemoveModal}
-                disabled={removing}
+                onClick={closeArchiveModal}
+                disabled={!!updatingId}
                 className="text-sm font-medium text-gray-500 hover:text-gray-900 px-4 py-2"
               >
                 Cancel
               </button>
               <button
-                onClick={handleConfirmRemove}
-                disabled={removing}
-                className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-60"
+                onClick={() => setServiceActive(confirmArchive, false)}
+                disabled={!!updatingId}
+                className="flex items-center gap-2 bg-amber-700 hover:bg-amber-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-60"
               >
-                {removing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                Remove
+                {updatingId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Archive
               </button>
             </div>
           </div>
@@ -1033,15 +1090,6 @@ function AccountManagement({ user, onUserUpdated, logout }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-const TABS = [
-  { id: 'personal',        label: 'Personal Info',       icon: User       },
-  { id: 'personalization', label: 'Personalization',     icon: Sliders    },
-  { id: 'services',        label: 'Service Management',  icon: Wrench     },
-  { id: 'orders',          label: 'Orders',              icon: ShoppingBag },
-  { id: 'security',        label: 'Security',            icon: Shield     },
-  { id: 'account',         label: 'Account Management',  icon: Settings   },
-]
-
 export default function ProfilePage() {
   const { user, logout, me } = useAuth()
   const navigate = useNavigate()
@@ -1149,7 +1197,7 @@ export default function ProfilePage() {
               </div>
 
               <nav className="p-3 space-y-1">
-                {TABS.map(({ id, label, icon: Icon }) => (
+                {PROFILE_TABS.map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
                     onClick={() => setActiveTab(id)}

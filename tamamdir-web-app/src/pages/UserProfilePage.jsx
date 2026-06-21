@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, Navigate, useNavigate } from 'react-router-dom'
-import { CheckCircle2, Star, ArrowLeft, AlertCircle, Loader2, Flag } from 'lucide-react'
+import { CheckCircle2, Star, ArrowLeft, AlertCircle, Loader2, Flag, Ban } from 'lucide-react'
 import ServiceCard from '../components/ServiceCard'
 import ReportModal from '../components/ReportModal'
 import api from '../lib/api'
@@ -47,6 +47,33 @@ export default function UserProfilePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showReportModal, setShowReportModal] = useState(false)
+  const [isBlocked, setIsBlocked] = useState(false)
+  const [blockBusy, setBlockBusy] = useState(false)
+
+  useEffect(() => {
+    if (!id || currentUser?.id === id) return
+    api.get(`/api/users/${id}/block-status`)
+      .then(data => setIsBlocked(!!data.blocked))
+      .catch(() => setIsBlocked(false))
+  }, [id, currentUser?.id])
+
+  const toggleBlock = async () => {
+    if (!id || blockBusy) return
+    setBlockBusy(true)
+    try {
+      if (isBlocked) {
+        await api.del(`/api/users/${id}/block`)
+        setIsBlocked(false)
+      } else {
+        await api.post(`/api/users/${id}/block`)
+        setIsBlocked(true)
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to update block status.')
+    } finally {
+      setBlockBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (currentUser?.id === id) return
@@ -139,14 +166,27 @@ export default function UserProfilePage() {
                 <div className="flex-1 text-center sm:text-left">
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-1">
                     <h1 className="text-2xl font-bold text-coffee">{profile.full_name}</h1>
-                    <button
-                      type="button"
-                      onClick={() => setShowReportModal(true)}
-                      className="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-gray-500 hover:text-red-600 shrink-0"
-                    >
-                      <Flag className="w-4 h-4" />
-                      Report
-                    </button>
+                    <div className="flex items-center justify-center sm:justify-end gap-3 shrink-0">
+                      {currentUser?.id !== id && (
+                        <button
+                          type="button"
+                          disabled={blockBusy}
+                          onClick={toggleBlock}
+                          className="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-gray-500 hover:text-red-600 disabled:opacity-60"
+                        >
+                          <Ban className="w-4 h-4" />
+                          {isBlocked ? 'Unblock' : 'Block'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowReportModal(true)}
+                        className="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-gray-500 hover:text-red-600 shrink-0"
+                      >
+                        <Flag className="w-4 h-4" />
+                        Report
+                      </button>
+                    </div>
                   </div>
                   {profile.department && (
                     <p className="text-gray-500 text-sm mb-2">{profile.department}</p>

@@ -4,6 +4,7 @@ import { Star, CheckCircle2, Clock, ArrowLeft, ChevronRight, AlertCircle, Loader
 import ServiceCard from '../components/ServiceCard'
 import ServiceImageGallery from '../components/ServiceImageGallery'
 import ReportModal from '../components/ReportModal'
+import FavoriteButton from '../components/FavoriteButton'
 import api from '../lib/api'
 import { formatPrice, formatDelivery, resolveMediaUrl, formatLocationType } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
@@ -196,16 +197,19 @@ export default function ServiceDetailPage() {
 
             <div className="flex items-start justify-between gap-4 mb-3">
               <h1 className="text-3xl font-bold text-coffee">{service.title}</h1>
-              {!isOwnService && (
-                <button
-                  type="button"
-                  onClick={() => setShowReportModal(true)}
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-red-600 shrink-0 mt-1"
-                >
-                  <Flag className="w-4 h-4" />
-                  Report
-                </button>
-              )}
+              <div className="flex items-center gap-2 shrink-0 mt-1">
+                {!isOwnService && <FavoriteButton serviceId={service.id} />}
+                {!isOwnService && (
+                  <button
+                    type="button"
+                    onClick={() => setShowReportModal(true)}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-red-600"
+                  >
+                    <Flag className="w-4 h-4" />
+                    Report
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-4 mb-6">

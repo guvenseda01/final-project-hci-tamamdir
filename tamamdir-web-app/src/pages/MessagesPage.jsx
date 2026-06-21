@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Send, Image, Plus, MoreVertical, Loader2, CheckCircle2, Ban, Flag } from 'lucide-react'
+import { Send, Image, Plus, MoreVertical, Loader2, CheckCircle2, Ban, Flag, AlertCircle } from 'lucide-react'
 import { cn, formatPrice, resolveMediaUrl } from '../lib/utils'
 import TamamdirLogo from '../components/TamamdirLogo'
 import api from '../lib/api'
@@ -26,6 +26,10 @@ function formatBanUntil(dateStr) {
 
 const chatPanelHeaderClass = 'px-5 py-5 border-b border-amber-200 bg-amber-100'
 const coffeeText = 'text-coffee'
+
+function isServiceLive(service) {
+  return service && service.is_active !== 0 && service.is_active !== false
+}
 
 function mergeTamamdirStatus(prev, payload, userId, otherId) {
   const ids = payload.confirmed_user_ids ?? []
@@ -131,6 +135,8 @@ export default function MessagesPage() {
   const [showFeedbackThanks, setShowFeedbackThanks] = useState(false)
   const [showChatMenu, setShowChatMenu] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
+  const [isUserBlocked, setIsUserBlocked] = useState(false)
+  const [blockBusy, setBlockBusy] = useState(false)
   const [roleFilter, setRoleFilter] = useState('all')
 
   useEffect(() => {
@@ -169,6 +175,39 @@ export default function MessagesPage() {
       setTamamdirStatus(null)
     }
   }, [user?.id])
+
+  useEffect(() => {
+    if (!activeConv?.other_id) {
+      setIsUserBlocked(false)
+      return
+    }
+    api.get(`/api/users/${activeConv.other_id}/block-status`)
+      .then(data => setIsUserBlocked(!!data.blocked))
+      .catch(() => setIsUserBlocked(false))
+  }, [activeConv?.other_id])
+
+  const toggleBlockUser = async () => {
+    if (!activeConv?.other_id || blockBusy) return
+    setBlockBusy(true)
+    try {
+      if (isUserBlocked) {
+        await api.del(`/api/users/${activeConv.other_id}/block`)
+        setIsUserBlocked(false)
+      } else {
+        await api.post(`/api/users/${activeConv.other_id}/block`)
+        setIsUserBlocked(true)
+        setConvs(prev => prev.filter(c => c.id !== activeConv.id))
+        setActiveConv(null)
+        setMessages([])
+        setTamamdirStatus(null)
+      }
+      setShowChatMenu(false)
+    } catch {
+      // ignore
+    } finally {
+      setBlockBusy(false)
+    }
+  }
 
   const fetchAllConversations = useCallback(async () => {
     return api.get('/api/messages/conversations')
@@ -546,9 +585,19 @@ export default function MessagesPage() {
     ?? activeService?.images?.[0]?.image_url
     ?? null
   const isServiceProvider = activeService?.provider_id === user?.id
+  const isServiceInactive = activeService != null && !isServiceLive(activeService)
+  const hasOngoingArrangement = Boolean(
+    tamamdirStatus?.my_confirmed ||
+    tamamdirStatus?.both_confirmed ||
+    tamamdirStatus?.other_confirmed
+  )
+  const customerMessagingBlocked = isServiceInactive && !isServiceProvider
+  const messagingDisabled = tamamdirStatus?.i_am_banned || customerMessagingBlocked
 
   const renderTamamdirAction = () => {
     if (!activeServiceId) return null
+
+    if (isServiceInactive && !hasOngoingArrangement) return null
 
     if (tamamdirStatus?.is_banned && tamamdirStatus?.can_unban) {
       return (
@@ -599,6 +648,7 @@ export default function MessagesPage() {
         </div>
       )
     }
+    if (isServiceInactive) return null
     return (
       <button
         onClick={handleTamamdir}
@@ -724,9 +774,12 @@ export default function MessagesPage() {
             {/* Vinted-style chat header */}
             <div className="bg-amber-50 border-b border-amber-100 shrink-0">
               <div className={cn('relative flex items-center justify-center', chatPanelHeaderClass)}>
-                <p className={cn('text-xl font-semibold truncate max-w-[70%] text-center', coffeeText)}>
+                <Link
+                  to={`/users/${activeConv.other_id}`}
+                  className={cn('text-xl font-semibold truncate max-w-[70%] text-center hover:underline', coffeeText)}
+                >
                   {activeConv.other_name}
-                </p>
+                </Link>
                 <div className="absolute right-4 top-1/2 -translate-y-1/2">
                   <button
                     type="button"
@@ -738,6 +791,15 @@ export default function MessagesPage() {
                   </button>
                   {showChatMenu && (
                     <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-amber-200 rounded-xl shadow-lg py-1 z-10">
+                      <button
+                        type="button"
+                        disabled={blockBusy}
+                        onClick={toggleBlockUser}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 text-left disabled:opacity-60"
+                      >
+                        <Ban className="w-4 h-4" />
+                        {isUserBlocked ? 'Unblock user' : 'Block user'}
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -786,6 +848,11 @@ export default function MessagesPage() {
                                 activeService?.price_unit ?? activeConv?.service_price_unit
                               )}
                             </>
+                          )}
+                          {isServiceInactive && (
+                            <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                              · Archived
+                            </span>
                           )}
                         </p>
                       </div>
@@ -839,13 +906,15 @@ export default function MessagesPage() {
                     return (
                       <div key={msg.id} className={cn('flex items-end gap-3', isMe ? 'flex-row-reverse' : 'flex-row')}>
                         {!isMe && (
-                          activeConv.other_avatar
-                            ? <img src={resolveMediaUrl(activeConv.other_avatar)} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 mb-1" />
-                            : (
-                              <div className="w-8 h-8 rounded-full bg-green-pale flex items-center justify-center shrink-0 mb-1">
-                                <span className="text-green-primary text-xs font-bold">{activeConv.other_name?.[0] ?? '?'}</span>
-                              </div>
-                            )
+                          <Link to={`/users/${activeConv.other_id}`} className="shrink-0 mb-1">
+                            {activeConv.other_avatar
+                              ? <img src={resolveMediaUrl(activeConv.other_avatar)} alt="" className="w-8 h-8 rounded-full object-cover" />
+                              : (
+                                <div className="w-8 h-8 rounded-full bg-green-pale flex items-center justify-center">
+                                  <span className="text-green-primary text-xs font-bold">{activeConv.other_name?.[0] ?? '?'}</span>
+                                </div>
+                              )}
+                          </Link>
                         )}
 
                         <div className={cn(
@@ -910,7 +979,8 @@ export default function MessagesPage() {
             {tamamdirStatus?.other_confirmed &&
               !tamamdirStatus?.my_confirmed &&
               !tamamdirStatus?.both_confirmed &&
-              !tamamdirStatus?.is_banned && (
+              !tamamdirStatus?.is_banned &&
+              !isServiceInactive && (
               <div className="px-6 py-4 bg-green-pale border-t border-green-100">
                 <div className="flex items-center gap-2 min-w-0">
                   <CheckCircle2 className="w-4 h-4 text-green-primary shrink-0" />
@@ -930,25 +1000,35 @@ export default function MessagesPage() {
                 </div>
               </div>
             )}
+            {isServiceInactive && (
+              <div className="px-6 py-3 bg-amber-50 border-t border-amber-100 flex items-center justify-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <p className="text-sm font-semibold text-amber-700 text-center">
+                  {isServiceProvider
+                    ? 'This listing is archived and hidden from the marketplace. Unarchive it from Service Management to accept new arrangements.'
+                    : 'This service is not active at the moment. Please check back later to see if it\'s available again.'}
+                </p>
+              </div>
+            )}
 
             {/* Input */}
             <div className="px-6 py-4 border-t border-amber-100 bg-amber-50">
               <div className="flex items-center gap-3">
                 <button
-                  disabled={tamamdirStatus?.i_am_banned}
+                  disabled={messagingDisabled}
                   className="p-2 rounded-lg hover:bg-amber-100 text-gray-500 hover:text-gray-600 disabled:opacity-40 disabled:pointer-events-none"
                 >
                   <Plus className="w-5 h-5" />
                 </button>
                 <button
-                  disabled={tamamdirStatus?.i_am_banned}
+                  disabled={messagingDisabled}
                   className="p-2 rounded-lg hover:bg-amber-100 text-gray-500 hover:text-gray-600 disabled:opacity-40 disabled:pointer-events-none"
                 >
                   <Image className="w-5 h-5" />
                 </button>
                 <div className={cn(
                   'flex-1 border rounded-xl px-4 py-2.5',
-                  tamamdirStatus?.i_am_banned
+                  messagingDisabled
                     ? 'bg-amber-100/80 border-amber-200'
                     : 'bg-white border-amber-200'
                 )}>
@@ -957,20 +1037,22 @@ export default function MessagesPage() {
                     placeholder={
                       tamamdirStatus?.i_am_banned
                         ? 'You cannot send messages while banned'
-                        : 'Type your message...'
+                        : customerMessagingBlocked
+                          ? 'This service is not active — you can\'t send new messages right now'
+                          : 'Type your message...'
                     }
                     value={message}
                     onChange={e => setMessage(e.target.value)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter' && !e.shiftKey && !tamamdirStatus?.i_am_banned) handleSend()
+                      if (e.key === 'Enter' && !e.shiftKey && !messagingDisabled) handleSend()
                     }}
-                    disabled={tamamdirStatus?.i_am_banned}
+                    disabled={messagingDisabled}
                     className="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none w-full disabled:cursor-not-allowed"
                   />
                 </div>
                 <button
                   onClick={handleSend}
-                  disabled={sending || !message.trim() || tamamdirStatus?.i_am_banned}
+                  disabled={sending || !message.trim() || messagingDisabled}
                   className="w-10 h-10 bg-green-primary rounded-xl flex items-center justify-center hover:bg-green-dark transition-colors disabled:opacity-50 disabled:pointer-events-none"
                 >
                   {sending

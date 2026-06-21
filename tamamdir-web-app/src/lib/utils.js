@@ -34,7 +34,9 @@ export function formatDelivery(days) {
 
 export const LOCATION_OPTIONS = [
   { value: 'on_campus', label: 'On campus' },
-  { value: 'near_campus', label: 'Near campus' },
+  { value: 'gulbahce', label: 'Gülbahçe' },
+  { value: 'karapinar', label: 'Karapınar' },
+  { value: 'urla_merkez', label: 'Urla Merkez' },
   { value: 'remote', label: 'Remote / online' },
 ]
 

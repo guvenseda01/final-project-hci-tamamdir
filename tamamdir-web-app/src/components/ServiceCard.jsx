@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Star, MapPin } from 'lucide-react'
 import { formatPrice, resolveMediaUrl, formatLocationType } from '../lib/utils'
+import FavoriteButton from './FavoriteButton'
 
 export default function ServiceCard({ service }) {
   return (
@@ -20,6 +21,9 @@ export default function ServiceCard({ service }) {
             <span className="bg-green-primary text-white text-xs font-semibold px-2.5 py-1 rounded-full">
               {formatPrice(service.price, service.price_unit)}
             </span>
+          </div>
+          <div className="absolute top-3 right-3">
+            <FavoriteButton serviceId={service.id} size="sm" />
           </div>
         </div>
 

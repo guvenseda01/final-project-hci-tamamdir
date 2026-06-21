@@ -57,6 +57,26 @@ export default function AdminReportsPage() {
     }
   }
 
+  const moderate = async (report, action) => {
+    setUpdatingId(report.id)
+    setError('')
+    try {
+      if (action === 'hide_service' && report.target_service_id) {
+        await api.post(`/api/admin/services/${report.target_service_id}/hide`)
+      } else if (action === 'suspend_user' && report.target_user_id) {
+        await api.post(`/api/admin/users/${report.target_user_id}/suspend`)
+      } else if (action === 'unsuspend_user' && report.target_user_id) {
+        await api.post(`/api/admin/users/${report.target_user_id}/unsuspend`)
+      }
+      await api.patch(`/api/admin/reports/${report.id}`, { status: 'reviewed' })
+      setReports(prev => prev.map(r => (r.id === report.id ? { ...r, status: 'reviewed' } : r)))
+    } catch (err) {
+      setError(err.message || 'Moderation action failed.')
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
   const pendingCount = reports.filter(r => r.status === 'pending').length
 
   return (
@@ -154,6 +174,26 @@ export default function AdminReportsPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
+                    {(report.target_type === 'service' && report.target_service_id) && (
+                      <button
+                        type="button"
+                        disabled={updatingId === report.id}
+                        onClick={() => moderate(report, 'hide_service')}
+                        className="text-xs font-semibold bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 disabled:opacity-60"
+                      >
+                        Hide service
+                      </button>
+                    )}
+                    {report.target_user_id && (
+                      <button
+                        type="button"
+                        disabled={updatingId === report.id}
+                        onClick={() => moderate(report, 'suspend_user')}
+                        className="text-xs font-semibold bg-amber-700 text-white px-3 py-1.5 rounded-lg hover:bg-amber-800 disabled:opacity-60"
+                      >
+                        Suspend user
+                      </button>
+                    )}
                     {report.status !== 'reviewed' && (
                       <button
                         type="button"

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { SlidersHorizontal, AlertCircle } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import ServiceCard from '../components/ServiceCard'
 import api from '../lib/api'
-import { LOCATION_OPTIONS } from '../lib/utils'
+import { cn, LOCATION_OPTIONS } from '../lib/utils'
 
 const SORT_MAP = {
   rating:     'rating',
@@ -11,6 +11,15 @@ const SORT_MAP = {
   price_high: 'price_desc',
   newest:     'newest',
   popular:    'popular',
+}
+
+function filterPillClass(active) {
+  return cn(
+    'text-sm font-semibold px-4 py-2 rounded-full transition-colors',
+    active
+      ? 'bg-green-pale text-green-primary ring-2 ring-green-primary'
+      : 'bg-green-pale text-green-primary hover:bg-green-badge'
+  )
 }
 
 function ServiceCardSkeleton() {
@@ -27,13 +36,14 @@ function ServiceCardSkeleton() {
 }
 
 export default function ServicesPage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const filterByInterests = searchParams.get('interests') === '1'
   const searchQuery = searchParams.get('q')?.trim() ?? ''
+  const activeLocation = searchParams.get('location_type') ?? ''
+  const minPrice = searchParams.get('min_price') ?? ''
+  const maxPrice = searchParams.get('max_price') ?? ''
 
   const [activeCategory, setActiveCategory] = useState('')
-  const [activeLocation, setActiveLocation] = useState('')
-  const [sortBy, setSortBy] = useState('rating')
 
   const [categories, setCategories] = useState([])
   const [services, setServices] = useState([])
@@ -51,13 +61,16 @@ export default function ServicesPage() {
 
     const run = async () => {
       setLoading(true)
+      setServices([])
       setError('')
       try {
-        const params = new URLSearchParams({ sort: SORT_MAP[sortBy], limit: '20' })
+        const params = new URLSearchParams({ sort: SORT_MAP.rating, limit: '20' })
         if (activeCategory) params.set('category', activeCategory)
-        if (activeLocation) params.set('location', activeLocation)
+        if (activeLocation) params.set('location_type', activeLocation)
         if (searchQuery) params.set('q', searchQuery)
         if (filterByInterests) params.set('interests', '1')
+        if (minPrice) params.set('min_price', minPrice)
+        if (maxPrice) params.set('max_price', maxPrice)
 
         const data = await api.get(`/api/services?${params}`)
         if (!cancelled) setServices(data.services)
@@ -70,14 +83,33 @@ export default function ServicesPage() {
 
     run()
     return () => { cancelled = true }
-  }, [activeCategory, activeLocation, sortBy, filterByInterests, searchQuery])
+  }, [activeCategory, activeLocation, filterByInterests, searchQuery, minPrice, maxPrice])
+
+  const setLocationFilter = (value) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (value) next.set('location_type', value)
+      else next.delete('location_type')
+      return next
+    }, { replace: true })
+  }
+
+  const setPriceFilter = (key, value) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      const trimmed = value.trim()
+      if (trimmed) next.set(key, trimmed)
+      else next.delete(key)
+      return next
+    }, { replace: true })
+  }
 
   return (
     <div className="min-h-screen bg-amber-50">
-      <main className="w-full px-4 sm:px-6 lg:px-8 py-10">
-        <div className="mb-8 w-full">
+      <main className="w-full px-4 sm:px-6 lg:px-8 pt-4 pb-10">
+        <div className="mb-4 w-full">
           <h1 className="text-3xl font-bold text-coffee mb-1">Marketplace</h1>
-          <p className="text-gray-500">
+          <p className="text-gray-500 text-sm">
             {searchQuery
               ? `Results for “${searchQuery}”.`
               : filterByInterests
@@ -86,34 +118,12 @@ export default function ServicesPage() {
           </p>
         </div>
 
-        {/* Sort */}
-        <div className="flex justify-end mb-8">
-          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
-            <SlidersHorizontal className="w-4 h-4 text-gray-400" />
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value)}
-              className="bg-transparent text-sm text-gray-700 outline-none cursor-pointer"
-            >
-              <option value="rating">Top Rated</option>
-              <option value="newest">Newest</option>
-              <option value="popular">Most Popular</option>
-              <option value="price_low">Price: Low to High</option>
-              <option value="price_high">Price: High to Low</option>
-            </select>
-          </div>
-        </div>
-
         {/* Location pills */}
-        <div className="flex gap-2 flex-wrap mb-4">
+        <div className="flex gap-2 flex-wrap mb-3">
           <button
             type="button"
-            onClick={() => setActiveLocation('')}
-            className={`text-sm font-medium px-4 py-2 rounded-full transition-colors ${
-              activeLocation === ''
-                ? 'bg-amber-200 text-coffee border border-amber-300'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+            onClick={() => setLocationFilter('')}
+            className={filterPillClass(activeLocation === '')}
           >
             All locations
           </button>
@@ -121,12 +131,8 @@ export default function ServicesPage() {
             <button
               key={opt.value}
               type="button"
-              onClick={() => setActiveLocation(opt.value)}
-              className={`text-sm font-medium px-4 py-2 rounded-full transition-colors ${
-                activeLocation === opt.value
-                  ? 'bg-amber-200 text-coffee border border-amber-300'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              onClick={() => setLocationFilter(opt.value)}
+              className={filterPillClass(activeLocation === opt.value)}
             >
               {opt.label}
             </button>
@@ -135,32 +141,68 @@ export default function ServicesPage() {
 
         {/* Category pills */}
         {categories.length > 0 && (
-          <div className="flex gap-2 flex-wrap mb-8">
+          <div className="flex gap-2 flex-wrap mb-6">
             <button
+              type="button"
               onClick={() => setActiveCategory('')}
-              className={`text-sm font-medium px-4 py-2 rounded-full transition-colors ${
-                activeCategory === ''
-                  ? 'bg-green-primary text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              className={filterPillClass(activeCategory === '')}
             >
               All
             </button>
             {categories.map(cat => (
               <button
                 key={cat.id}
+                type="button"
                 onClick={() => setActiveCategory(cat.slug)}
-                className={`text-sm font-medium px-4 py-2 rounded-full transition-colors ${
-                  activeCategory === cat.slug
-                    ? 'bg-green-primary text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                className={filterPillClass(activeCategory === cat.slug)}
               >
                 {cat.name}
               </button>
             ))}
           </div>
         )}
+
+        {/* Price range */}
+        <div className="flex flex-wrap items-end gap-3 mb-6">
+          <div>
+            <label htmlFor="min-price" className="block text-xs font-medium text-gray-500 mb-1">Min price (₺)</label>
+            <input
+              id="min-price"
+              type="number"
+              min="0"
+              placeholder="0"
+              value={minPrice}
+              onChange={e => setPriceFilter('min_price', e.target.value)}
+              className="w-28 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-coffee outline-none focus:border-green-primary focus:ring-1 focus:ring-green-primary"
+            />
+          </div>
+          <div>
+            <label htmlFor="max-price" className="block text-xs font-medium text-gray-500 mb-1">Max price (₺)</label>
+            <input
+              id="max-price"
+              type="number"
+              min="0"
+              placeholder="Any"
+              value={maxPrice}
+              onChange={e => setPriceFilter('max_price', e.target.value)}
+              className="w-28 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-coffee outline-none focus:border-green-primary focus:ring-1 focus:ring-green-primary"
+            />
+          </div>
+          {(minPrice || maxPrice) && (
+            <button
+              type="button"
+              onClick={() => setSearchParams(prev => {
+                const next = new URLSearchParams(prev)
+                next.delete('min_price')
+                next.delete('max_price')
+                return next
+              }, { replace: true })}
+              className="text-sm font-medium text-green-primary hover:underline pb-2"
+            >
+              Clear price
+            </button>
+          )}
+        </div>
 
         {/* Error */}
         {error && (
@@ -182,10 +224,14 @@ export default function ServicesPage() {
         ) : (
           <div className="text-center py-20">
             <p className="text-gray-400 text-lg font-medium">
-              {searchQuery ? `No results for “${searchQuery}”` : 'No services found'}
+              {searchQuery
+                ? `No results for “${searchQuery}”`
+                : activeLocation
+                  ? `No services in ${LOCATION_OPTIONS.find(o => o.value === activeLocation)?.label ?? 'this location'}`
+                  : 'No services found'}
             </p>
             <p className="text-gray-300 text-sm mt-1">
-              {searchQuery ? 'Try a different search term or clear filters.' : 'Try a different category or sort option'}
+              {searchQuery ? 'Try a different search term or clear filters.' : 'Try a different category or location'}
             </p>
           </div>
         )}

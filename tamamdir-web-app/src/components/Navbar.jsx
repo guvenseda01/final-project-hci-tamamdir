@@ -1,9 +1,10 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback } from 'react'
-import { Bell, Mail, Search, Shield } from 'lucide-react'
-import { cn, resolveMediaUrl } from '../lib/utils'
+import { Bell, Mail, Search, Shield, Heart } from 'lucide-react'
+import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
 import TamamdirLogo from './TamamdirLogo'
+import ProfileMenuDropdown from './ProfileMenuDropdown'
 import api from '../lib/api'
 import { getSocket } from '../lib/socket'
 
@@ -102,6 +103,14 @@ export default function Navbar() {
           </Link>
 
           <Link
+            to="/favorites"
+            className={iconBtn(location.pathname === '/favorites')}
+            aria-label="Favorites"
+          >
+            <Heart className="w-5 h-5" />
+          </Link>
+
+          <Link
             to="/notifications"
             className={iconBtn(location.pathname === '/notifications')}
             aria-label="Notifications"
@@ -121,19 +130,7 @@ export default function Navbar() {
             Add service
           </Link>
 
-          <Link to="/profile" className="ml-1 sm:ml-2 shrink-0">
-            {user?.avatar_url ? (
-              <img
-                src={resolveMediaUrl(user.avatar_url)}
-                alt="Profile"
-                className="w-9 h-9 rounded-full object-cover"
-              />
-            ) : (
-              <div className="w-9 h-9 rounded-full bg-green-pale flex items-center justify-center">
-                <span className="text-green-primary text-sm font-bold">{user?.full_name?.[0] ?? '?'}</span>
-              </div>
-            )}
-          </Link>
+          <ProfileMenuDropdown />
           </div>
         </div>
       </div>
