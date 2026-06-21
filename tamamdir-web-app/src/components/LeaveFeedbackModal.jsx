@@ -103,7 +103,7 @@ export default function LeaveFeedbackModal({
         aria-labelledby="feedback-modal-title"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 id="feedback-modal-title" className="text-lg font-bold text-gray-900">
+          <h2 id="feedback-modal-title" className="text-lg font-bold text-coffee">
             {isUpdate ? 'Update feedback' : 'Leave feedback'}
           </h2>
           <button
@@ -125,7 +125,7 @@ export default function LeaveFeedbackModal({
               </span>
             </div>
             <div className="min-w-0">
-              <p className="font-semibold text-gray-900 text-sm">{revieweeName}</p>
+              <p className="font-semibold text-coffee text-sm">{revieweeName}</p>
               {serviceTitle && (
                 <p className="text-sm text-gray-500 truncate">{serviceTitle}</p>
               )}

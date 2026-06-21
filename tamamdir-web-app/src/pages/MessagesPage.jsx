@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Send, Image, Plus, MoreVertical, Loader2, CheckCircle2, Ban } from 'lucide-react'
-import { cn, formatPrice } from '../lib/utils'
-import Navbar from '../components/Navbar'
+import { Send, Image, Plus, MoreVertical, Loader2, CheckCircle2, Ban, Flag } from 'lucide-react'
+import { cn, formatPrice, resolveMediaUrl } from '../lib/utils'
 import TamamdirLogo from '../components/TamamdirLogo'
 import api from '../lib/api'
 import { getSocket, joinConversation, leaveConversation, disconnectSocket } from '../lib/socket'
 import LeaveFeedbackModal from '../components/LeaveFeedbackModal'
 import FeedbackThanksPopup from '../components/FeedbackThanksPopup'
+import ReportModal from '../components/ReportModal'
 import { useAuth } from '../context/AuthContext'
 
 function formatMsgTime(dateStr) {
@@ -23,6 +23,9 @@ function formatBanUntil(dateStr) {
     year: 'numeric',
   })
 }
+
+const chatPanelHeaderClass = 'px-5 py-5 border-b border-amber-200 bg-amber-100'
+const coffeeText = 'text-coffee'
 
 function mergeTamamdirStatus(prev, payload, userId, otherId) {
   const ids = payload.confirmed_user_ids ?? []
@@ -126,7 +129,14 @@ export default function MessagesPage() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
   const [showFeedbackThanks, setShowFeedbackThanks] = useState(false)
+  const [showChatMenu, setShowChatMenu] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
   const [roleFilter, setRoleFilter] = useState('all')
+
+  useEffect(() => {
+    setShowChatMenu(false)
+    setShowReportModal(false)
+  }, [activeConv?.id])
   const messagesEndRef = useRef(null)
   const activeConvIdRef = useRef(null)
   const prevConvIdRef = useRef(null)
@@ -556,7 +566,7 @@ export default function MessagesPage() {
 
     if (tamamdirStatus?.both_confirmed && tamamdirStatus?.my_review_submitted && !tamamdirStatus?.other_review_submitted) {
       return (
-        <div className="bg-amber-50 text-amber-700 text-sm font-medium px-5 py-2.5 rounded-xl border border-amber-100 shrink-0">
+        <div className="bg-amber-100 text-amber-700 text-sm font-medium px-5 py-2.5 rounded-xl border border-amber-200 shrink-0 shadow-sm">
           Waiting for {activeConv?.other_name}&apos;s feedback
         </div>
       )
@@ -575,7 +585,7 @@ export default function MessagesPage() {
           <button
             onClick={() => setShowCancelConfirm(true)}
             disabled={cancelSubmitting}
-            className="text-sm font-semibold text-white bg-white/15 hover:bg-white/25 border border-white/30 px-5 py-2.5 rounded-xl transition-colors disabled:opacity-60"
+            className="text-sm font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-200 px-5 py-2.5 rounded-xl transition-colors disabled:opacity-60"
           >
             Cancel
           </button>
@@ -584,7 +594,7 @@ export default function MessagesPage() {
     }
     if (tamamdirStatus?.my_confirmed && !tamamdirStatus?.both_confirmed) {
       return (
-        <div className="bg-amber-50 text-amber-700 text-sm font-medium px-5 py-2.5 rounded-xl border border-amber-100 shrink-0">
+        <div className="bg-amber-100 text-amber-700 text-sm font-medium px-5 py-2.5 rounded-xl border border-amber-200 shrink-0 shadow-sm">
           Waiting for {activeConv?.other_name}&apos;s approval
         </div>
       )
@@ -594,12 +604,12 @@ export default function MessagesPage() {
         onClick={handleTamamdir}
         disabled={tamamdirSubmitting}
         title="Confirm this service"
-        className="flex items-center bg-white border-2 border-green-primary px-4 py-2 rounded-xl hover:bg-green-pale transition-all duration-200 hover:scale-105 active:scale-95 shadow-md disabled:opacity-60 disabled:pointer-events-none shrink-0"
+        className="flex items-center border-2 border-green-primary rounded-lg px-2 py-1 bg-transparent hover:bg-green-pale/40 transition-colors disabled:opacity-60 disabled:pointer-events-none shrink-0"
       >
         {tamamdirSubmitting ? (
-          <Loader2 className="w-6 h-6 text-green-primary animate-spin" />
+          <Loader2 className="w-5 h-5 text-green-primary animate-spin" />
         ) : (
-          <TamamdirLogo className="h-9" />
+          <TamamdirLogo className="h-8" />
         )}
       </button>
     )
@@ -607,8 +617,7 @@ export default function MessagesPage() {
 
   if (loadingConvs) {
     return (
-      <div className="flex flex-col h-screen bg-white overflow-hidden">
-        <Navbar />
+      <div className="flex flex-col flex-1 min-h-0 bg-amber-50 overflow-hidden">
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-green-primary animate-spin" />
         </div>
@@ -617,17 +626,15 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden">
-      <Navbar />
-
-      <div className="flex flex-1 overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 bg-amber-50 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
 
         {/* ── Conversation list ── */}
-        <div className="w-80 shrink-0 border-r border-gray-100 flex flex-col">
-          <div className="px-5 py-5 border-b border-gray-100">
-            <h2 className="text-xl font-bold text-gray-900">Chats</h2>
+        <div className="w-80 shrink-0 border-r border-amber-100 flex flex-col bg-amber-50">
+          <div className={chatPanelHeaderClass}>
+            <h2 className={cn('text-xl font-bold', coffeeText)}>Chats</h2>
           </div>
-          <div className="px-4 py-3 border-b border-gray-100 space-y-3">
+          <div className="px-4 py-3 border-b border-amber-100 space-y-3">
             <div className="flex flex-wrap gap-2">
               {[
                 { id: 'all', label: 'All' },
@@ -642,14 +649,14 @@ export default function MessagesPage() {
                     'text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors',
                     roleFilter === opt.id
                       ? 'bg-green-primary text-white border-green-primary'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-green-primary hover:text-green-primary'
+                      : 'bg-white text-gray-600 border-amber-200 hover:border-green-primary hover:text-green-primary'
                   )}
                 >
                   {opt.label}
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 bg-white border border-amber-200 rounded-lg px-3 py-2">
               <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -671,15 +678,15 @@ export default function MessagesPage() {
                 key={conv.id}
                 onClick={() => handleSelectConvFromList(conv.id)}
                 className={cn(
-                  'w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-gray-50 transition-colors border-b border-gray-50',
-                  activeConv?.id === conv.id && 'bg-green-pale border-l-2 border-l-green-primary'
+                  'w-full flex items-start gap-3 px-5 py-4 text-left hover:bg-amber-100/80 transition-colors border-b border-amber-100/60',
+                  activeConv?.id === conv.id && 'bg-amber-100 border-l-2 border-l-amber-400'
                 )}
               >
                 <div className="relative shrink-0">
                   {conv.other_avatar
-                    ? <img src={conv.other_avatar} alt={conv.other_name} className="w-11 h-11 rounded-full object-cover" />
+                    ? <img src={resolveMediaUrl(conv.other_avatar)} alt={conv.other_name} className="w-11 h-11 rounded-full object-cover" />
                     : (
-                      <div className="w-11 h-11 rounded-full bg-green-pale flex items-center justify-center">
+                      <div className="w-11 h-11 rounded-full bg-amber-100 flex items-center justify-center">
                         <span className="text-green-primary font-bold text-sm">{conv.other_name?.[0] ?? '?'}</span>
                       </div>
                     )
@@ -693,7 +700,7 @@ export default function MessagesPage() {
                     </span>
                   )}
                   <div className="flex items-center justify-between gap-2 mb-0.5">
-                    <p className="font-semibold text-sm text-gray-900 truncate">{conv.other_name}</p>
+                    <p className="font-semibold text-sm text-coffee truncate">{conv.other_name}</p>
                     <span className="text-xs text-gray-400 shrink-0">
                       {formatConvTime(conv.last_msg_at)}
                     </span>
@@ -714,71 +721,101 @@ export default function MessagesPage() {
         {activeConv ? (
           <div className="flex-1 flex flex-col min-w-0">
 
-            {/* Service context bar — only when opened with a linked service */}
-            {activeServiceId && (
-              <div className="flex items-center justify-between gap-4 px-6 py-3 bg-green-primary border-b border-green-dark">
-                <Link
-                  to={`/services/${activeServiceId}`}
-                  className="flex items-center gap-3 min-w-0 hover:opacity-90 transition-opacity"
-                >
-                  {serviceCover ? (
-                    <img
-                      src={serviceCover}
-                      alt=""
-                      className="w-10 h-10 rounded-lg object-cover shrink-0 border-2 border-white/30 shadow-sm"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-lg bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
-                      <span className="text-white text-xs font-bold">S</span>
+            {/* Vinted-style chat header */}
+            <div className="bg-amber-50 border-b border-amber-100 shrink-0">
+              <div className={cn('relative flex items-center justify-center', chatPanelHeaderClass)}>
+                <p className={cn('text-xl font-semibold truncate max-w-[70%] text-center', coffeeText)}>
+                  {activeConv.other_name}
+                </p>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                  <button
+                    type="button"
+                    onClick={() => setShowChatMenu(v => !v)}
+                    className="p-2 rounded-lg hover:bg-amber-200/60 text-gray-400"
+                    aria-label="Chat options"
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
+                  {showChatMenu && (
+                    <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-amber-200 rounded-xl shadow-lg py-1 z-10">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowChatMenu(false)
+                          setShowReportModal(true)
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 text-left"
+                      >
+                        <Flag className="w-4 h-4" />
+                        Report conversation
+                      </button>
                     </div>
                   )}
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-medium text-green-light uppercase tracking-wide">
-                      {isServiceProvider ? 'Service offered' : 'Requested service'}
-                    </p>
-                    <p className="text-sm font-semibold text-white truncate">
-                      {activeService?.title ?? tamamdirStatus?.service_title ?? activeConv?.service_title ?? 'Loading…'}
-                    </p>
-                    {(activeService?.price != null || activeConv?.service_price != null) && (
-                      <p className="text-xs text-white/75">
-                        {formatPrice(
-                          activeService?.price ?? activeConv?.service_price,
-                          activeService?.price_unit ?? activeConv?.service_price_unit
-                        )}
-                      </p>
-                    )}
-                  </div>
-                </Link>
-                {renderTamamdirAction()}
+                </div>
               </div>
-            )}
 
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  {activeConv.other_avatar
-                    ? <img src={activeConv.other_avatar} alt={activeConv.other_name} className="w-10 h-10 rounded-full object-cover" />
-                    : (
-                      <div className="w-10 h-10 rounded-full bg-green-pale flex items-center justify-center">
-                        <span className="text-green-primary font-bold text-sm">{activeConv.other_name?.[0] ?? '?'}</span>
+              {(activeServiceId || activeConv?.service_title) && (
+                <div className="flex items-center gap-3 px-4 py-3 border-t border-amber-100">
+                  {activeServiceId ? (
+                    <Link
+                      to={`/services/${activeServiceId}`}
+                      className="flex items-center gap-3 min-w-0 flex-1 hover:opacity-90 transition-opacity"
+                    >
+                      {serviceCover ? (
+                        <img
+                          src={resolveMediaUrl(serviceCover)}
+                          alt=""
+                          className="w-14 h-14 rounded-md object-cover shrink-0 border border-amber-200"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-md bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0">
+                          <span className="text-coffee text-sm font-bold">S</span>
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-coffee truncate leading-tight">
+                          {isServiceProvider ? 'Service offered' : 'Requested service'}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">
+                          {activeService?.title ?? tamamdirStatus?.service_title ?? activeConv?.service_title ?? 'Loading…'}
+                          {(activeService?.price != null || activeConv?.service_price != null) && (
+                            <>
+                              {' · '}
+                              {formatPrice(
+                                activeService?.price ?? activeConv?.service_price,
+                                activeService?.price_unit ?? activeConv?.service_price_unit
+                              )}
+                            </>
+                          )}
+                        </p>
                       </div>
-                    )
-                  }
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-light rounded-full border-2 border-white" />
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-14 h-14 rounded-md bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0">
+                        <span className="text-coffee text-sm font-bold">S</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-coffee truncate leading-tight">
+                          Requested service
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">
+                          {activeConv.service_title}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {activeServiceId && (
+                    <div className="shrink-0">
+                      {renderTamamdirAction()}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <p className="font-semibold text-gray-900 text-sm">{activeConv.other_name}</p>
-                </div>
-              </div>
-
-              <button className="p-2 rounded-lg hover:bg-gray-100">
-                <MoreVertical className="w-5 h-5 text-gray-400" />
-              </button>
+              )}
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-gray-50/30">
+            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 bg-amber-50">
               {loadingMsgs ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="w-6 h-6 text-green-primary animate-spin" />
@@ -786,7 +823,7 @@ export default function MessagesPage() {
               ) : (
                 <>
                   <div className="text-center">
-                    <span className="text-xs text-gray-400 bg-white px-3 py-1 rounded-full border border-gray-100">
+                    <span className="text-xs text-gray-400 bg-white px-3 py-1 rounded-full border border-amber-200">
                       TODAY
                     </span>
                   </div>
@@ -803,7 +840,7 @@ export default function MessagesPage() {
                       <div key={msg.id} className={cn('flex items-end gap-3', isMe ? 'flex-row-reverse' : 'flex-row')}>
                         {!isMe && (
                           activeConv.other_avatar
-                            ? <img src={activeConv.other_avatar} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 mb-1" />
+                            ? <img src={resolveMediaUrl(activeConv.other_avatar)} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 mb-1" />
                             : (
                               <div className="w-8 h-8 rounded-full bg-green-pale flex items-center justify-center shrink-0 mb-1">
                                 <span className="text-green-primary text-xs font-bold">{activeConv.other_name?.[0] ?? '?'}</span>
@@ -815,7 +852,7 @@ export default function MessagesPage() {
                           'max-w-xs lg:max-w-md px-4 py-3 rounded-2xl text-sm leading-relaxed',
                           isMe
                             ? 'bg-green-primary text-white rounded-br-sm'
-                            : 'bg-white text-gray-800 border border-gray-100 rounded-bl-sm shadow-sm'
+                            : 'bg-amber-100 text-coffee border border-amber-200 rounded-bl-sm shadow-sm'
                         )}>
                           {msg.content}
                           <div className={cn('text-xs mt-1', isMe ? 'text-green-light text-right' : 'text-gray-400')}>
@@ -825,7 +862,7 @@ export default function MessagesPage() {
 
                         {isMe && (
                           user?.avatar_url
-                            ? <img src={user.avatar_url} alt="Me" className="w-8 h-8 rounded-full object-cover shrink-0 mb-1" />
+                            ? <img src={resolveMediaUrl(user.avatar_url)} alt="Me" className="w-8 h-8 rounded-full object-cover shrink-0 mb-1" />
                             : (
                               <div className="w-8 h-8 rounded-full bg-green-primary flex items-center justify-center text-white text-xs font-bold shrink-0 mb-1">
                                 {user?.full_name?.[0] ?? 'ME'}
@@ -895,25 +932,25 @@ export default function MessagesPage() {
             )}
 
             {/* Input */}
-            <div className="px-6 py-4 border-t border-gray-100 bg-white">
+            <div className="px-6 py-4 border-t border-amber-100 bg-amber-50">
               <div className="flex items-center gap-3">
                 <button
                   disabled={tamamdirStatus?.i_am_banned}
-                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-40 disabled:pointer-events-none"
+                  className="p-2 rounded-lg hover:bg-amber-100 text-gray-500 hover:text-gray-600 disabled:opacity-40 disabled:pointer-events-none"
                 >
                   <Plus className="w-5 h-5" />
                 </button>
                 <button
                   disabled={tamamdirStatus?.i_am_banned}
-                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-40 disabled:pointer-events-none"
+                  className="p-2 rounded-lg hover:bg-amber-100 text-gray-500 hover:text-gray-600 disabled:opacity-40 disabled:pointer-events-none"
                 >
                   <Image className="w-5 h-5" />
                 </button>
                 <div className={cn(
                   'flex-1 border rounded-xl px-4 py-2.5',
                   tamamdirStatus?.i_am_banned
-                    ? 'bg-gray-100 border-gray-200'
-                    : 'bg-gray-50 border-gray-200'
+                    ? 'bg-amber-100/80 border-amber-200'
+                    : 'bg-white border-amber-200'
                 )}>
                   <input
                     type="text"
@@ -945,20 +982,8 @@ export default function MessagesPage() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col min-w-0">
-            {requestedServiceId && activeService?.title && (
-              <div className="flex items-center justify-between gap-4 px-6 py-3 bg-green-primary border-b border-green-dark">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-medium text-green-light uppercase tracking-wide">
-                    Service context
-                  </p>
-                  <p className="text-sm font-semibold text-white truncate">
-                    {activeService.title}
-                  </p>
-                </div>
-              </div>
-            )}
-            <div className="flex-1 flex items-center justify-center bg-gray-50/30 px-6">
+          <div className="flex-1 flex flex-col min-w-0 bg-amber-50">
+            <div className="flex-1 flex items-center justify-center px-6">
               <div className="text-center max-w-sm">
                 <p className="text-base font-medium text-gray-600 mb-1">
                   {convs.length === 0 ? 'Chat box is empty' : 'No chat selected'}
@@ -978,7 +1003,7 @@ export default function MessagesPage() {
         {showCancelConfirm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Cancel arrangement?</h3>
+              <h3 className="text-lg font-semibold text-coffee mb-2">Cancel arrangement?</h3>
               <p className="text-sm text-gray-600 mb-3">{cancelModalCopy.body}</p>
               <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 mb-6">
                 {cancelModalCopy.note}
@@ -1025,6 +1050,14 @@ export default function MessagesPage() {
         <FeedbackThanksPopup
           open={showFeedbackThanks}
           onClose={() => setShowFeedbackThanks(false)}
+        />
+
+        <ReportModal
+          open={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          targetType="conversation"
+          targetId={activeConv?.id}
+          targetLabel={activeConv?.other_name}
         />
 
       </div>

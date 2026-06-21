@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { CheckCircle2, HelpCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 
@@ -93,20 +93,10 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <CheckCircle2 className="w-6 h-6 text-green-primary" strokeWidth={2.5} />
-          <span className="text-xl font-bold text-green-primary">Tamamdır!</span>
-        </div>
-        <button className="p-2 rounded-lg hover:bg-gray-100">
-          <HelpCircle className="w-5 h-5 text-gray-400" />
-        </button>
-      </header>
-
+    <div className="min-h-full bg-amber-50 flex flex-col">
       <div className="flex-1 max-w-4xl mx-auto w-full px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-green-primary mb-2">
             {isFromProfile ? 'Update Your Interests' : "Tell Us What You're Into"}
           </h1>
           <p className="text-gray-500">
@@ -170,7 +160,7 @@ export default function OnboardingPage() {
         )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-4 shadow-lg">
+      <div className="fixed bottom-0 left-0 right-0 bg-amber-50 border-t border-amber-100 px-6 py-4 shadow-lg">
         {saveError && (
           <div className="flex items-center gap-2 text-red-600 text-sm mb-3">
             <AlertCircle className="w-4 h-4 shrink-0" />

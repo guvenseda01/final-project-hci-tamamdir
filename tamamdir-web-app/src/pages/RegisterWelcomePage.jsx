@@ -5,7 +5,7 @@ export default function RegisterWelcomePage() {
   const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-amber-50">
       <div className="flex flex-1">
         <div className="hidden lg:flex lg:w-1/2 bg-green-primary relative overflow-hidden">
           <div className="absolute top-12 left-12 z-10 flex items-center gap-2">
@@ -35,16 +35,11 @@ export default function RegisterWelcomePage() {
 
         <div className="flex-1 flex flex-col justify-center items-center px-8 sm:px-16 py-12">
           <div className="w-full max-w-md text-center">
-            <div className="flex lg:hidden items-center justify-center gap-2 mb-10">
-              <CheckCircle2 className="w-6 h-6 text-green-primary" />
-              <span className="text-xl font-bold text-green-primary">Tamamdır!</span>
-            </div>
-
             <div className="w-16 h-16 bg-green-pale rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="w-9 h-9 text-green-primary" strokeWidth={2.5} />
             </div>
 
-            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">
+            <h1 className="text-3xl sm:text-4xl font-bold text-coffee mb-3">
               Welcome to Tamamdır!
             </h1>
             <p className="text-lg text-gray-500 mb-8">

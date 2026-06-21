@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Loader2, MessageSquare, ShoppingBag, Star } from 'lucide-react'
-import Navbar from '../components/Navbar'
 import api from '../lib/api'
 import { getSocket } from '../lib/socket'
 import { useAuth } from '../context/AuthContext'
@@ -92,11 +91,9 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
+    <div className="min-h-screen bg-amber-50">
       <main className="max-w-2xl mx-auto px-4 sm:px-6 py-10">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Notifications</h1>
+        <h1 className="text-2xl font-bold text-coffee mb-1">Notifications</h1>
         <p className="text-gray-500 text-sm mb-8">Stay updated on orders, messages, and account activity.</p>
 
         {loading ? (
@@ -134,7 +131,7 @@ export default function NotificationsPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <p className={cn('text-sm font-semibold text-gray-900', unread && 'text-green-dark')}>
+                      <p className={cn('text-sm font-semibold text-coffee', unread && 'text-green-dark')}>
                         {notification.title}
                       </p>
                       <span className="text-xs text-gray-400 shrink-0">

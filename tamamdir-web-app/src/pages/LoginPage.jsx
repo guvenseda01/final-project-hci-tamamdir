@@ -33,7 +33,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-amber-50">
       <div className="flex flex-1">
         {/* Left green panel */}
         <div className="hidden lg:flex lg:w-1/2 bg-green-primary flex-col justify-between p-12 relative overflow-hidden">
@@ -75,14 +75,8 @@ export default function LoginPage() {
         {/* Right form panel */}
         <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 lg:px-20 py-12">
           <div className="w-full max-w-md mx-auto">
-            {/* Mobile logo */}
-            <div className="flex lg:hidden items-center gap-2 mb-10">
-              <CheckCircle2 className="w-6 h-6 text-green-primary" strokeWidth={2.5} />
-              <span className="text-xl font-bold text-green-primary">Tamamdır!</span>
-            </div>
-
             <div className="mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
+              <h1 className="text-3xl font-bold text-coffee mb-2">Welcome Back</h1>
               <p className="text-gray-500">Secure access to your campus service dashboard.</p>
             </div>
 
@@ -122,7 +116,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -183,7 +177,7 @@ export default function LoginPage() {
       <footer className="border-t border-gray-100 py-8 px-8 sm:px-16">
         <div className="max-w-7xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-6 text-sm">
           <div>
-            <p className="font-semibold text-gray-900 mb-2">Tamamdır</p>
+            <p className="font-semibold text-coffee mb-2">Tamamdır</p>
             <p className="text-gray-500 text-xs leading-relaxed">
               Empowering students to achieve more through collective reliability and expert peer services.
             </p>
@@ -194,7 +188,7 @@ export default function LoginPage() {
             { title: 'Legal', links: ['Privacy Policy'] },
           ].map((col) => (
             <div key={col.title}>
-              <p className="font-semibold text-gray-900 mb-2 uppercase text-xs tracking-wide">{col.title}</p>
+              <p className="font-semibold text-coffee mb-2 uppercase text-xs tracking-wide">{col.title}</p>
               {col.links.map((l) => (
                 <p key={l} className="text-gray-500 hover:text-gray-700 cursor-pointer text-xs mb-1">{l}</p>
               ))}
@@ -212,7 +206,7 @@ export default function LoginPage() {
           <CheckCircle2 className="w-4 h-4 text-green-primary" />
         </div>
         <div>
-          <p className="text-xs font-semibold text-gray-800">Verified Campus Provider</p>
+          <p className="text-xs font-semibold text-coffee">Verified Campus Provider</p>
           <p className="text-xs text-gray-500">IZTECH verification status: Active</p>
         </div>
       </div>

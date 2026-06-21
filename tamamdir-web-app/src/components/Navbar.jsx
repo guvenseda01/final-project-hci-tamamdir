@@ -1,7 +1,7 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback } from 'react'
-import { Bell, Mail, Search } from 'lucide-react'
-import { cn } from '../lib/utils'
+import { Bell, Mail, Search, Shield } from 'lucide-react'
+import { cn, resolveMediaUrl } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
 import TamamdirLogo from './TamamdirLogo'
 import api from '../lib/api'
@@ -9,8 +9,26 @@ import { getSocket } from '../lib/socket'
 
 export default function Navbar() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const [unreadCount, setUnreadCount] = useState(0)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  useEffect(() => {
+    if (location.pathname === '/services') {
+      setSearchQuery(new URLSearchParams(location.search).get('q') ?? '')
+    }
+  }, [location.pathname, location.search])
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    const q = searchQuery.trim()
+    if (q) {
+      navigate(`/services?q=${encodeURIComponent(q)}`)
+    } else {
+      navigate('/services')
+    }
+  }
 
   const refreshUnreadCount = useCallback(() => {
     api.get('/api/notifications/unread-count')
@@ -37,64 +55,44 @@ export default function Navbar() {
     }
   }, [location.pathname])
 
-  const links = [
-    { to: '/home', label: 'Home' },
-    { to: '/services', label: 'Marketplace' },
-    { to: '/messages', label: 'Messages' },
-  ]
-
   const iconBtn = (active) => cn(
-    'p-2 rounded-lg transition-colors relative',
-    active ? 'bg-green-pale text-green-primary' : 'hover:bg-gray-100 text-gray-500'
+    'p-2.5 rounded-lg transition-colors relative',
+    active ? 'text-coffee' : 'text-gray-600 hover:text-coffee'
   )
 
   return (
-    <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
-      <div className="w-full px-6 flex items-center justify-between h-20">
+    <header className="sticky top-0 z-50 bg-amber-100 border-b border-amber-200">
+      <div className="w-full pl-4 pr-4 sm:pl-6 sm:pr-6 flex items-center h-20 gap-4 sm:gap-6">
         <Link to="/home" className="flex items-center shrink-0">
-          <TamamdirLogo />
+          <TamamdirLogo className="h-[66px]" />
         </Link>
 
-        <nav className="hidden md:flex items-center gap-14">
-          {links.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={cn(
-                'text-sm font-medium transition-colors',
-                location.pathname === link.to
-                  ? 'text-green-primary border-b-2 border-green-primary pb-0.5'
-                  : 'text-gray-500 hover:text-gray-900'
-              )}
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="hidden sm:flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 w-48">
-            <Search className="w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search services..."
-              className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-full"
-            />
-          </div>
-
-          <Link
-            to="/notifications"
-            className={iconBtn(location.pathname === '/notifications')}
-            aria-label="Notifications"
+        <div className="flex flex-1 items-center gap-3 sm:gap-4 min-w-0 justify-end">
+          <form
+            onSubmit={handleSearch}
+            className="flex-1 max-w-xl lg:max-w-2xl min-w-0 flex items-center gap-2 border border-amber-200 rounded-lg px-3 py-2.5 bg-amber-50 shadow-sm"
           >
-            <Bell className="w-5 h-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </Link>
+            <Search className="w-4 h-4 text-gray-400 shrink-0" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search services..."
+              className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-full min-w-0"
+            />
+          </form>
 
+          <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+          {user?.is_admin && (
+            <Link
+              to="/admin/reports"
+              className={iconBtn(location.pathname.startsWith('/admin'))}
+              aria-label="Admin reports"
+              title="Admin reports"
+            >
+              <Shield className="w-5 h-5" />
+            </Link>
+          )}
           <Link
             to="/messages"
             className={iconBtn(location.pathname.startsWith('/messages'))}
@@ -103,19 +101,40 @@ export default function Navbar() {
             <Mail className="w-5 h-5" />
           </Link>
 
-          <Link to="/profile" className="ml-1">
+          <Link
+            to="/notifications"
+            className={iconBtn(location.pathname === '/notifications')}
+            aria-label="Notifications"
+          >
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </Link>
+
+          <Link
+            to="/services/new"
+            className="hidden sm:inline-flex ml-1 bg-green-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-green-dark transition-colors whitespace-nowrap"
+          >
+            Add service
+          </Link>
+
+          <Link to="/profile" className="ml-1 sm:ml-2 shrink-0">
             {user?.avatar_url ? (
               <img
-                src={user.avatar_url}
+                src={resolveMediaUrl(user.avatar_url)}
                 alt="Profile"
-                className="w-9 h-9 rounded-full border-2 border-green-primary object-cover"
+                className="w-9 h-9 rounded-full object-cover"
               />
             ) : (
-              <div className="w-9 h-9 rounded-full border-2 border-green-primary bg-green-pale flex items-center justify-center">
+              <div className="w-9 h-9 rounded-full bg-green-pale flex items-center justify-center">
                 <span className="text-green-primary text-sm font-bold">{user?.full_name?.[0] ?? '?'}</span>
               </div>
             )}
           </Link>
+          </div>
         </div>
       </div>
     </header>

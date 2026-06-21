@@ -18,7 +18,7 @@ export default function FeedbackThanksPopup({ open, onClose }) {
         <div className="w-14 h-14 rounded-full bg-green-pale flex items-center justify-center mx-auto mb-4">
           <CheckCircle2 className="w-8 h-8 text-green-primary" />
         </div>
-        <h2 id="feedback-thanks-title" className="text-lg font-bold text-gray-900 mb-2">
+        <h2 id="feedback-thanks-title" className="text-lg font-bold text-coffee mb-2">
           Thanks!
         </h2>
         <p className="text-sm text-gray-600 mb-6">
