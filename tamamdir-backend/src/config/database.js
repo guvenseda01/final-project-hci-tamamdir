@@ -171,14 +171,6 @@ const SCHEMA_STATEMENTS = [
     created_at TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE INDEX IF NOT EXISTS idx_email_verifications_user ON email_verifications(user_id)`,
-  `CREATE TABLE IF NOT EXISTS password_resets (
-    id         TEXT PRIMARY KEY,
-    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    code_hash  TEXT NOT NULL,
-    expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  )`,
-  `CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_services_provider ON services(provider_id)`,
   `CREATE INDEX IF NOT EXISTS idx_services_category ON services(category_id)`,
   `CREATE INDEX IF NOT EXISTS idx_orders_buyer      ON orders(buyer_id)`,
@@ -274,42 +266,6 @@ async function initDB() {
   await pool.query(
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_review_count INTEGER DEFAULT 0'
   );
-  await pool.query(
-    "ALTER TABLE services ADD COLUMN IF NOT EXISTS location_type TEXT DEFAULT 'on_campus'"
-  );
-  await pool.query(
-    "UPDATE services SET location_type = 'gulbahce' WHERE location_type = 'near_campus'"
-  );
-  await pool.query(
-    'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INTEGER DEFAULT 0'
-  );
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS reports (
-      id          TEXT PRIMARY KEY,
-      reporter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      target_type TEXT NOT NULL,
-      target_id   TEXT NOT NULL,
-      reason      TEXT NOT NULL,
-      details     TEXT,
-      status      TEXT NOT NULL DEFAULT 'pending',
-      created_at  TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-  await pool.query(
-    'CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, created_at DESC)'
-  );
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS user_blocks (
-      blocker_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      blocked_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      PRIMARY KEY (blocker_id, blocked_id),
-      CHECK (blocker_id != blocked_id)
-    )
-  `);
-  await pool.query(
-    'CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked ON user_blocks(blocked_id)'
-  );
 
   // Allow multiple conversations per pair (one per service)
   await pool.query(`
@@ -330,18 +286,6 @@ async function initDB() {
   `);
 
   await seed();
-
-  const { v4: uuidv4 } = require('uuid');
-  for (const c of [
-    { name: 'Teaching & Tutoring', icon: 'school',     slug: 'teaching-tutoring' },
-    { name: 'Other',               icon: 'more_horiz', slug: 'others'            },
-  ]) {
-    await pool.query(
-      'INSERT INTO categories (id,name,icon,slug) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING',
-      [uuidv4(), c.name, c.icon, c.slug]
-    );
-  }
-
   console.log(`📦  PostgreSQL connected: ${process.env.DATABASE_URL}`);
 }
 

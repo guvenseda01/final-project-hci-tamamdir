@@ -2,37 +2,6 @@ const router = require('express').Router();
 const { run, get, all } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 
-router.get('/services', requireAuth, async (req, res, next) => {
-  try {
-    const services = await all(
-      `SELECT s.*,
-              c.name AS category_name, c.slug AS category_slug, c.icon AS category_icon,
-              u.full_name AS provider_name, u.avatar_url AS provider_avatar,
-              (CASE WHEN u.is_verified = 1 AND u.is_verified_student = 1 THEN 1 ELSE 0 END) AS provider_verified,
-              u.rating AS provider_rating
-       FROM service_favorites f
-       JOIN services s ON s.id = f.service_id
-       JOIN categories c ON c.id = s.category_id
-       JOIN users u ON u.id = s.provider_id
-       WHERE f.user_id = ? AND s.is_active = 1
-       ORDER BY f.created_at DESC`,
-      [req.user.id]
-    );
-
-    for (const svc of services) {
-      const img = await get(
-        'SELECT image_url FROM service_images WHERE service_id = ? AND is_cover = 1 LIMIT 1',
-        [svc.id]
-      );
-      svc.cover_image = img ? img.image_url : null;
-    }
-
-    res.json(services);
-  } catch (err) {
-    next(err);
-  }
-});
-
 router.get('/', requireAuth, async (req, res, next) => {
   try {
     const rows = await all(

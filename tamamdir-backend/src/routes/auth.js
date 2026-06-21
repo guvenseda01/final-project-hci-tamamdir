@@ -151,8 +151,8 @@ const { v4: uuidv4 } = require('uuid');
 
 const { run, get } = require('../config/database');
 const { signToken, requireAuth } = require('../middleware/auth');
-const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/email');
-const { isIyteStudentEmail, isAdminEmail, sanitizeUser } = require('../utils/user');
+const { sendVerificationEmail } = require('../services/email');
+const { isIyteStudentEmail, sanitizeUser } = require('../utils/user');
 const {
   generateCode,
   hashCode,
@@ -211,22 +211,6 @@ async function createAndSendVerificationCode(user) {
   return code;
 }
 
-async function createAndSendPasswordResetCode(user) {
-  const code = generateCode();
-  const codeHash = hashCode(code);
-  const expiresAt = getExpiryDate();
-
-  await run('DELETE FROM password_resets WHERE user_id = ?', [user.id]);
-  await run(
-    `INSERT INTO password_resets (id, user_id, code_hash, expires_at)
-     VALUES (?, ?, ?, ?)`,
-    [uuidv4(), user.id, codeHash, expiresAt.toISOString()]
-  );
-
-  await sendPasswordResetEmail(user.email, code);
-  return code;
-}
-
 // ── POST /api/auth/register ─────────────────────────────────────────────────
 router.post(
   '/register',
@@ -257,12 +241,11 @@ router.post(
       const id           = uuidv4();
       const passwordHash = await bcrypt.hash(password, 12);
       const isVerifiedStudent = isIyteStudentEmail(email) ? 1 : 0;
-      const isAdmin = isAdminEmail(email) ? 1 : 0;
 
       await run(
-        `INSERT INTO users (id, full_name, email, password_hash, is_verified, is_verified_student, is_admin)
-         VALUES (?, ?, ?, ?, 0, ?, ?)`,
-        [id, full_name, email, passwordHash, isVerifiedStudent, isAdmin]
+        `INSERT INTO users (id, full_name, email, password_hash, is_verified, is_verified_student)
+         VALUES (?, ?, ?, ?, 0, ?)`,
+        [id, full_name, email, passwordHash, isVerifiedStudent]
       );
 
       const user = await get('SELECT * FROM users WHERE id = ?', [id]);
@@ -425,90 +408,6 @@ router.post(
         email: user.email,
         expires_in_minutes: CODE_TTL_MINUTES,
       });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-// ── POST /api/auth/forgot-password ──────────────────────────────────────────
-router.post(
-  '/forgot-password',
-  [body('email').trim().isEmail().normalizeEmail(EMAIL_NORM)],
-  async (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(422).json({ errors: errors.array() });
-    }
-
-    try {
-      const { email } = req.body;
-      const user = await get('SELECT * FROM users WHERE email = ?', [email]);
-
-      if (user && user.is_verified && !user.deleted_at) {
-        await createAndSendPasswordResetCode(user);
-      }
-
-      return res.json({
-        message: 'If an account exists for this email, a reset code has been sent.',
-        email,
-        expires_in_minutes: CODE_TTL_MINUTES,
-      });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
-
-// ── POST /api/auth/reset-password ───────────────────────────────────────────
-router.post(
-  '/reset-password',
-  [
-    body('email').trim().isEmail().normalizeEmail(EMAIL_NORM),
-    body('code').trim().isLength({ min: 6, max: 6 }).withMessage('Code must be 6 digits'),
-    body('new_password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-  ],
-  async (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(422).json({ errors: errors.array() });
-    }
-
-    try {
-      const { email, code, new_password } = req.body;
-      const user = await get('SELECT * FROM users WHERE email = ?', [email]);
-      if (!user || user.deleted_at) {
-        return res.status(400).json({ error: 'Invalid or expired reset code' });
-      }
-
-      const record = await get(
-        `SELECT * FROM password_resets
-         WHERE user_id = ?
-         ORDER BY created_at DESC
-         LIMIT 1`,
-        [user.id]
-      );
-
-      if (!record) {
-        return res.status(400).json({ error: 'No reset code found. Please request a new one.' });
-      }
-
-      if (isExpired(record.expires_at)) {
-        return res.status(400).json({ error: 'Reset code expired. Please request a new code.' });
-      }
-
-      if (record.code_hash !== hashCode(code)) {
-        return res.status(400).json({ error: 'Invalid reset code' });
-      }
-
-      const passwordHash = await bcrypt.hash(new_password, 12);
-      await run('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?', [
-        passwordHash,
-        user.id,
-      ]);
-      await run('DELETE FROM password_resets WHERE user_id = ?', [user.id]);
-
-      return res.json({ message: 'Password reset successfully' });
     } catch (err) {
       next(err);
     }

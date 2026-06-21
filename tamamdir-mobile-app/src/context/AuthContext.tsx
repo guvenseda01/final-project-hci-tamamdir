@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 import api from "../lib/api";
 import { resolveMediaUrl } from "../lib/mediaUrl";
+import { disconnectSocket } from "../lib/socket";
 import type { User, UserInterest } from "../data/types";
 
 interface ApiUser {
@@ -114,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
+    disconnectSocket();
     localStorage.removeItem("token");
     setUser(null);
   }

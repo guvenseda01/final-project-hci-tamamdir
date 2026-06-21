@@ -1,94 +1,185 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import TopBar from "../components/TopBar";
 import NotificationsDropdown from "../components/NotificationsDropdown";
 import ProfileMenuDropdown from "../components/ProfileMenuDropdown";
 import BottomNav from "../components/BottomNav";
-import ChatView from "./ChatView";
+import ChatView, { type ChatConversationMeta } from "./ChatView";
 import { usePreferences } from "../context/PreferencesContext";
-import type { Conversation } from "../data/types";
+import { useAuth } from "../context/AuthContext";
+import UserAvatar from "../components/UserAvatar";
+import { getSocket } from "../lib/socket";
 import api from "../lib/api";
 
-type ServiceContext = { id: string; title: string; price: string; image: string; providerId?: string };
+type RoleFilter = "all" | "provider" | "customer";
 
-function saveServiceContext(convId: string, ctx: ServiceContext) {
-  try {
-    const all = JSON.parse(localStorage.getItem("conv_service_ctx") ?? "{}");
-    all[convId] = ctx;
-    localStorage.setItem("conv_service_ctx", JSON.stringify(all));
-  } catch {}
-}
+type ConversationListItem = ChatConversationMeta & {
+  lastMessage: string;
+  lastTime: string;
+  lastMsgAt?: string;
+  unread: boolean;
+  my_role?: string;
+};
 
-function loadServiceContext(convId: string): ServiceContext | null {
-  try {
-    const all = JSON.parse(localStorage.getItem("conv_service_ctx") ?? "{}");
-    return all[convId] ?? null;
-  } catch { return null; }
+function mapConversation(c: Record<string, unknown>, locale: string): ConversationListItem {
+  const lastAt = (c.last_msg_at ?? c.last_message_at) as string | undefined;
+  return {
+    id: String(c.id),
+    participantId: String(c.other_id ?? ""),
+    participantName: String(c.other_name ?? ""),
+    participantAvatar: String(c.other_avatar ?? ""),
+    service_id: (c.service_id as string) ?? null,
+    service_title: (c.service_title as string) ?? null,
+    service_price: c.service_price != null ? Number(c.service_price) : null,
+    service_price_unit: (c.service_price_unit as string) ?? null,
+    lastMessage: String(c.last_message ?? ""),
+    lastTime: lastAt
+      ? new Date(lastAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
+      : "",
+    lastMsgAt: lastAt,
+    unread: Number(c.unread_count ?? 0) > 0,
+    my_role: (c.my_role as string) ?? undefined,
+  };
 }
 
 export default function MessagesPage() {
   const location = useLocation();
+  const { user } = useAuth();
   const { t, preferences } = usePreferences();
-  const locationState = (location.state as any) ?? {};
-  const [search, setSearch] = useState("");
+  const locationState = (location.state as Record<string, unknown>) ?? {};
 
-  const [activeChat, setActiveChat] = useState<Conversation | null>(
-    locationState.openConversation ?? null
+  const locale =
+    preferences.language === "tr"
+      ? "tr-TR"
+      : preferences.language === "de"
+        ? "de-DE"
+        : preferences.language === "es"
+          ? "es-ES"
+          : "en-US";
+
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [loading, setLoading] = useState(true);
+  const [activeChat, setActiveChat] = useState<ChatConversationMeta | null>(
+    (locationState.openConversation as ChatConversationMeta) ?? null
   );
-  const [activeChatService, setActiveChatService] = useState<ServiceContext | null>(() => {
-    if (locationState.serviceContext && locationState.openConversation?.id) {
-      saveServiceContext(locationState.openConversation.id, locationState.serviceContext);
-      return locationState.serviceContext;
-    }
-    return null;
+  const [activeServiceId, setActiveServiceId] = useState<string | null>(() => {
+    const fromNav = locationState.serviceId as string | undefined;
+    const fromCtx = (locationState.serviceContext as { id?: string } | undefined)?.id;
+    return fromNav ?? fromCtx ?? null;
   });
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversations, setConversations] = useState<ConversationListItem[]>([]);
+
+  const loadConversations = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.get("/api/messages/conversations");
+      const list = Array.isArray(data) ? data : [];
+      setConversations(list.map((c) => mapConversation(c, locale)));
+    } catch {
+      setConversations([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [locale]);
 
   useEffect(() => {
-    api.get('/api/messages/conversations')
-      .then((data: any) => {
-        const list = Array.isArray(data) ? data : [];
-        setConversations(list.map((c: any) => ({
-          id: c.id,
-          participantId: c.other_id ?? "",
-          participantName: c.other_name ?? "",
-          participantAvatar: c.other_avatar ?? "",
-          lastMessage: c.last_message ?? "",
-          lastTime: (c.last_msg_at ?? c.last_message_at)
-            ? new Date(c.last_msg_at ?? c.last_message_at).toLocaleTimeString(preferences.language === "tr" ? "tr-TR" : preferences.language === "de" ? "de-DE" : preferences.language === "es" ? "es-ES" : "en-US", { hour: "2-digit", minute: "2-digit" })
-            : "",
-          unread: (c.unread_count ?? 0) > 0,
-          messages: [],
-        })));
-      })
-      .catch(() => {});
-  }, []);
+    loadConversations();
+  }, [loadConversations]);
 
   useEffect(() => {
     const convId = locationState.openConversationId as string | undefined;
+    const serviceIdFromNav = locationState.serviceId as string | undefined;
+    if (serviceIdFromNav) setActiveServiceId(serviceIdFromNav);
     if (!convId || conversations.length === 0) return;
     const conv = conversations.find((c) => c.id === convId);
     if (conv) {
       setActiveChat(conv);
-      setActiveChatService(loadServiceContext(convId));
+      setActiveServiceId(serviceIdFromNav ?? conv.service_id ?? null);
     }
-  }, [locationState.openConversationId, conversations]);
+  }, [locationState.openConversationId, locationState.serviceId, conversations]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const socket = getSocket();
+    if (!socket) return;
+
+    const onConvUpdated = ({
+      id,
+      last_message,
+      last_msg_at,
+    }: {
+      id: string;
+      last_message: string;
+      last_msg_at: string;
+    }) => {
+      setConversations((prev) => {
+        const next = prev.map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                lastMessage: last_message,
+                lastTime: last_msg_at
+                  ? new Date(last_msg_at).toLocaleTimeString(locale, {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : c.lastTime,
+                unread: activeChat?.id === id ? false : true,
+                lastMsgAt: last_msg_at ?? c.lastMsgAt,
+              }
+            : c
+        );
+        return [...next].sort(
+          (a, b) =>
+            new Date(b.lastMsgAt ?? 0).getTime() - new Date(a.lastMsgAt ?? 0).getTime()
+        );
+      });
+    };
+
+    const onNewMessage = (msg: { conversation_id: string; content: string; created_at: string }) => {
+      onConvUpdated({
+        id: msg.conversation_id,
+        last_message: msg.content,
+        last_msg_at: msg.created_at,
+      });
+    };
+
+    socket.on("conversation:updated", onConvUpdated);
+    socket.on("message:new", onNewMessage);
+
+    return () => {
+      socket.off("conversation:updated", onConvUpdated);
+      socket.off("message:new", onNewMessage);
+    };
+  }, [user?.id, locale, activeChat?.id]);
+
+  const filteredByRole =
+    roleFilter === "all"
+      ? conversations
+      : conversations.filter((c) => c.my_role === roleFilter);
+
+  const filtered = filteredByRole.filter(
+    (c) =>
+      c.participantName.toLowerCase().includes(search.toLowerCase()) ||
+      c.lastMessage.toLowerCase().includes(search.toLowerCase()) ||
+      (c.service_title ?? "").toLowerCase().includes(search.toLowerCase())
+  );
 
   if (activeChat) {
     return (
       <ChatView
         conversation={activeChat}
-        serviceContext={activeChatService ?? undefined}
-        onBack={() => { setActiveChat(null); setActiveChatService(null); }}
+        initialServiceId={activeServiceId ?? activeChat.service_id}
+        onBack={() => {
+          setActiveChat(null);
+          setActiveServiceId(null);
+          loadConversations();
+        }}
+        onListRefresh={loadConversations}
       />
     );
   }
-
-  const filtered = conversations.filter(
-    (c) =>
-      c.participantName.toLowerCase().includes(search.toLowerCase()) ||
-      c.lastMessage.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <div className="bg-background min-h-screen max-w-md mx-auto">
@@ -107,9 +198,33 @@ export default function MessagesPage() {
           <p className="text-on-surface-variant text-xs mt-0.5">{t("messages.sub")}</p>
         </div>
 
-        {/* Search */}
+        <div className="flex flex-wrap gap-2 mb-md">
+          {(
+            [
+              { id: "all" as const, label: "Tümü" },
+              { id: "provider" as const, label: "Sağlayıcı" },
+              { id: "customer" as const, label: "Müşteri" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setRoleFilter(opt.id)}
+              className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${
+                roleFilter === opt.id
+                  ? "bg-primary text-on-primary border-primary"
+                  : "bg-surface-container-lowest text-on-surface-variant border-outline-variant/30"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         <div className="relative mb-lg">
-          <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">search</span>
+          <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">
+            search
+          </span>
           <input
             type="text"
             value={search}
@@ -119,49 +234,70 @@ export default function MessagesPage() {
           />
         </div>
 
-        {/* Conversation List */}
-        <div className="flex flex-col gap-base">
-          {filtered.map((conv) => (
-            <div
-              key={conv.id}
-              onClick={() => { setActiveChat(conv); setActiveChatService(loadServiceContext(conv.id)); }}
-              className="flex items-center gap-md p-md bg-surface-container-lowest rounded-xl shadow-card hover:bg-surface-container-low transition-colors cursor-pointer active:scale-[0.98] duration-150"
-            >
-              <div className="relative flex-shrink-0">
-                <img
-                  src={conv.participantAvatar}
-                  alt={conv.participantName}
-                  className={`w-14 h-14 rounded-full object-cover ${conv.unread ? "border-2 border-primary-container" : ""}`}
-                />
-                {conv.unread && (
-                  <div className="absolute bottom-0 right-0 w-4 h-4 bg-primary-container border-2 border-white rounded-full" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-baseline mb-0.5">
-                  <h3 className="font-bold text-sm text-on-surface truncate">{conv.participantName}</h3>
-                  <span className={`text-[10px] font-bold ${conv.unread ? "text-primary-container" : "text-on-surface-variant"}`}>
-                    {conv.lastTime}
-                  </span>
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <span className="material-symbols-outlined animate-spin text-primary text-4xl">
+              progress_activity
+            </span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <p className="text-center text-outline text-sm py-8">Henüz sohbet yok.</p>
+        ) : (
+          <div className="flex flex-col gap-base">
+            {filtered.map((conv) => (
+              <div
+                key={conv.id}
+                onClick={() => {
+                  setActiveChat(conv);
+                  setActiveServiceId(conv.service_id ?? null);
+                }}
+                className="flex items-center gap-md p-md bg-surface-container-lowest rounded-xl shadow-card hover:bg-surface-container-low transition-colors cursor-pointer active:scale-[0.98] duration-150"
+              >
+                <div className="relative flex-shrink-0">
+                  <UserAvatar
+                    src={conv.participantAvatar}
+                    userId={conv.participantId}
+                    name={conv.participantName}
+                    alt={conv.participantName}
+                    className={`w-14 h-14 rounded-full object-cover ${
+                      conv.unread ? "border-2 border-primary-container" : ""
+                    }`}
+                  />
+                  {conv.unread && (
+                    <div className="absolute bottom-0 right-0 w-4 h-4 bg-primary-container border-2 border-white rounded-full" />
+                  )}
                 </div>
-                <p className={`text-xs truncate ${conv.unread ? "text-on-surface font-bold" : "text-on-surface-variant"}`}>
-                  {conv.lastMessage}
-                </p>
+                <div className="flex-1 min-w-0">
+                  {conv.service_title && (
+                    <span className="inline-block text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary mb-1 truncate max-w-full">
+                      {conv.service_title}
+                    </span>
+                  )}
+                  <div className="flex justify-between items-baseline mb-0.5">
+                    <h3 className="font-bold text-sm text-on-surface truncate">
+                      {conv.participantName}
+                    </h3>
+                    <span
+                      className={`text-[10px] font-bold ${
+                        conv.unread ? "text-primary-container" : "text-on-surface-variant"
+                      }`}
+                    >
+                      {conv.lastTime}
+                    </span>
+                  </div>
+                  <p
+                    className={`text-xs truncate ${
+                      conv.unread ? "text-on-surface font-bold" : "text-on-surface-variant"
+                    }`}
+                  >
+                    {conv.lastMessage || "Henüz mesaj yok"}
+                  </p>
+                </div>
               </div>
-              {conv.unread && (
-                <div className="w-2.5 h-2.5 bg-primary-container rounded-full flex-shrink-0" />
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </main>
-
-      {/* FAB */}
-      <button
-        className="fixed right-4 bottom-24 w-14 h-14 bg-gradient-to-br from-primary-container to-primary text-white rounded-full shadow-lg flex items-center justify-center active:scale-90 transition-transform z-40"
-      >
-        <span className="material-symbols-outlined fill-icon">edit_square</span>
-      </button>
 
       <BottomNav />
     </div>
