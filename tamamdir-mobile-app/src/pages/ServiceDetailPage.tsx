@@ -4,6 +4,8 @@ import BottomNav from "../components/BottomNav";
 import TamamdirButton from "../components/TamamdirButton";
 import Toast from "../components/Toast";
 import VerificationBadge from "../components/VerificationBadge";
+import ServiceImage from "../components/ServiceImage";
+import UserAvatar from "../components/UserAvatar";
 import { useServices } from "../context/ServicesContext";
 import { useAuth } from "../context/AuthContext";
 import api from "../lib/api";
@@ -138,19 +140,17 @@ export default function ServiceDetailPage() {
             id: conv.id,
             participantId: service.providerId,
             participantName: service.providerName,
-            participantAvatar: service.providerAvatar,
+            participantAvatar: null,
+            service_id: service.id,
+            service_title: service.title,
+            service_price: service.priceNum,
+            service_price_unit: service.priceUnit,
             lastMessage: "",
             lastTime: "",
             unread: false,
             messages: [],
           },
-          serviceContext: {
-            id: service.id,
-            title: service.title,
-            price: service.price,
-            image: service.image,
-            providerId: service.providerId,
-          },
+          serviceId: service.id,
         },
       });
     } catch {
@@ -237,16 +237,22 @@ export default function ServiceDetailPage() {
 
       <main className="mt-[60px]">
         {/* Hero Image */}
-        <section className="relative w-full aspect-[4/3] bg-surface-container-highest overflow-hidden">
+        <section className="relative w-full aspect-[4/3] bg-surface-container-highest overflow-hidden shrink-0">
           {(() => {
-            const imgs = service.images?.length ? service.images : [service.image];
+            const imgs = service.images?.length
+              ? service.images
+              : service.image
+                ? [service.image]
+                : [];
             return (
               <>
-                <img
-                  src={imgs[activeImageIndex]}
-                  alt={service.title}
-                  className="w-full h-full object-cover"
-                />
+                <div className="absolute inset-0">
+                  <ServiceImage
+                    src={imgs[activeImageIndex] ?? null}
+                    alt={service.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
                 {imgs.length > 1 && (
                   <>
                     <button
@@ -278,7 +284,7 @@ export default function ServiceDetailPage() {
         </section>
 
         {/* Main Info Card */}
-        <section className="px-margin-mobile -mt-8 relative z-10">
+        <section className="px-margin-mobile mt-4 relative z-10">
           <div className="bg-surface-container-lowest rounded-xl p-md shadow-card border border-slate-100">
             <div className="flex justify-between items-start mb-base">
               <div className="space-y-1">
@@ -293,8 +299,10 @@ export default function ServiceDetailPage() {
 
             {/* Provider */}
             <div className="flex items-center gap-md py-md border-t border-b border-slate-50 mt-md">
-              <img
+              <UserAvatar
                 src={service.providerAvatar}
+                userId={service.providerId}
+                name={service.providerName}
                 alt={service.providerName}
                 className="w-10 h-10 rounded-full border-2 border-primary object-cover"
               />
@@ -434,7 +442,13 @@ export default function ServiceDetailPage() {
               {reviews.map((r) => (
                 <div key={r.id} className="p-md bg-surface-container-low rounded-xl border border-slate-100">
                   <div className="flex items-center gap-2 mb-2">
-                    <img src={r.reviewerAvatar} alt={r.reviewerName} className="w-8 h-8 rounded-full object-cover" />
+                    <UserAvatar
+                      src={r.reviewerAvatar}
+                      userId={r.reviewerId}
+                      name={r.reviewerName}
+                      alt={r.reviewerName}
+                      className="w-8 h-8 rounded-full object-cover"
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm text-on-surface">{r.reviewerName}</p>
                       <StarRow rating={r.rating} />
@@ -485,7 +499,12 @@ export default function ServiceDetailPage() {
                   className="min-w-[180px] bg-surface-container-lowest rounded-xl overflow-hidden border border-slate-100 shadow-card cursor-pointer"
                 >
                   <div className="h-28 bg-slate-200">
-                    <img src={s.image} alt={s.title} className="w-full h-full object-cover" />
+                    <ServiceImage
+                      src={s.image}
+                      serviceId={s.id}
+                      alt={s.title}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <div className="p-3">
                     <p className="font-bold text-sm truncate">{s.title}</p>
