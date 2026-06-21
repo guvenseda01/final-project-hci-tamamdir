@@ -1,59 +1,47 @@
-const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
+const { Pool } = require('pg');
 
-let db;
+let pool;
 
-function run(sql, params = []) {
-  try {
-    const stmt   = db.prepare(sql);
-    const result = stmt.run(...params);
-    return Promise.resolve({ lastID: result.lastInsertRowid, changes: result.changes });
-  } catch (err) {
-    return Promise.reject(err);
-  }
+// Convert SQLite ? placeholders to PostgreSQL $1, $2, … notation
+function toPostgres(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
 }
 
-function get(sql, params = []) {
-  try {
-    const stmt = db.prepare(sql);
-    const row  = stmt.get(...params);
-    return Promise.resolve(row ?? null);
-  } catch (err) {
-    return Promise.reject(err);
-  }
+async function run(sql, params = []) {
+  const result = await pool.query(toPostgres(sql), params);
+  return { rowCount: result.rowCount };
 }
 
-function all(sql, params = []) {
-  try {
-    const stmt = db.prepare(sql);
-    const rows = stmt.all(...params);
-    return Promise.resolve(rows);
-  } catch (err) {
-    return Promise.reject(err);
-  }
+async function get(sql, params = []) {
+  const result = await pool.query(toPostgres(sql), params);
+  return result.rows[0] ?? null;
+}
+
+async function all(sql, params = []) {
+  const result = await pool.query(toPostgres(sql), params);
+  return result.rows;
 }
 
 const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS users (
-    id                   TEXT PRIMARY KEY,
-    full_name            TEXT NOT NULL,
-    email                TEXT NOT NULL UNIQUE,
-    password_hash        TEXT NOT NULL,
-    avatar_url           TEXT,
-    bio                  TEXT,
-    department           TEXT,
-    year                 TEXT,
+    id               TEXT PRIMARY KEY,
+    full_name        TEXT NOT NULL,
+    email            TEXT NOT NULL UNIQUE,
+    password_hash    TEXT NOT NULL,
+    avatar_url       TEXT,
+    bio              TEXT,
+    department       TEXT,
+    year             TEXT,
     is_verified          INTEGER DEFAULT 0,
     is_verified_student  INTEGER DEFAULT 0,
     is_provider          INTEGER DEFAULT 0,
-    is_active            INTEGER DEFAULT 1,
-    wallet_balance       REAL DEFAULT 0.0,
-    total_earnings       REAL DEFAULT 0.0,
-    rating               REAL DEFAULT 0.0,
-    review_count         INTEGER DEFAULT 0,
-    deleted_at           TEXT,
-    created_at           TEXT DEFAULT (datetime('now')),
-    updated_at           TEXT DEFAULT (datetime('now'))
+    wallet_balance   REAL DEFAULT 0.0,
+    total_earnings   REAL DEFAULT 0.0,
+    rating           REAL DEFAULT 0.0,
+    review_count     INTEGER DEFAULT 0,
+    created_at       TIMESTAMPTZ DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS categories (
     id    TEXT PRIMARY KEY,
@@ -79,8 +67,8 @@ const SCHEMA_STATEMENTS = [
     rating        REAL DEFAULT 0.0,
     review_count  INTEGER DEFAULT 0,
     order_count   INTEGER DEFAULT 0,
-    created_at    TEXT DEFAULT (datetime('now')),
-    updated_at    TEXT DEFAULT (datetime('now'))
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS service_images (
     id         TEXT PRIMARY KEY,
@@ -88,7 +76,7 @@ const SCHEMA_STATEMENTS = [
     image_url  TEXT NOT NULL,
     is_cover   INTEGER DEFAULT 0,
     sort_order INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS orders (
     id              TEXT PRIMARY KEY,
@@ -98,12 +86,12 @@ const SCHEMA_STATEMENTS = [
     status          TEXT NOT NULL DEFAULT 'pending',
     price_at_order  REAL NOT NULL,
     note            TEXT,
-    scheduled_at    TEXT,
-    completed_at    TEXT,
-    cancelled_at    TEXT,
+    scheduled_at    TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    cancelled_at    TIMESTAMPTZ,
     cancel_reason   TEXT,
-    created_at      TEXT DEFAULT (datetime('now')),
-    updated_at      TEXT DEFAULT (datetime('now'))
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS conversations (
     id            TEXT PRIMARY KEY,
@@ -111,8 +99,8 @@ const SCHEMA_STATEMENTS = [
     participant_b TEXT NOT NULL REFERENCES users(id),
     service_id    TEXT REFERENCES services(id),
     last_message  TEXT,
-    last_msg_at   TEXT,
-    created_at    TEXT DEFAULT (datetime('now')),
+    last_msg_at   TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (participant_a, participant_b)
   )`,
   `CREATE TABLE IF NOT EXISTS messages (
@@ -121,13 +109,13 @@ const SCHEMA_STATEMENTS = [
     sender_id       TEXT NOT NULL REFERENCES users(id),
     content         TEXT NOT NULL,
     is_read         INTEGER DEFAULT 0,
-    created_at      TEXT DEFAULT (datetime('now'))
+    created_at      TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS conversation_tamamdir (
     conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     service_id      TEXT NOT NULL REFERENCES services(id),
     user_id         TEXT NOT NULL REFERENCES users(id),
-    confirmed_at    TEXT DEFAULT (datetime('now')),
+    confirmed_at    TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (conversation_id, service_id, user_id)
   )`,
   `CREATE TABLE IF NOT EXISTS conversation_service_arrangements (
@@ -136,9 +124,9 @@ const SCHEMA_STATEMENTS = [
     cancel_count         INTEGER DEFAULT 0,
     customer_cancel_count INTEGER DEFAULT 0,
     provider_cancel_count INTEGER DEFAULT 0,
-    banned_until         TEXT,
+    banned_until         TIMESTAMPTZ,
     banned_user_id       TEXT REFERENCES users(id),
-    updated_at           TEXT DEFAULT (datetime('now')),
+    updated_at           TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (conversation_id, service_id)
   )`,
   `CREATE TABLE IF NOT EXISTS reviews (
@@ -149,7 +137,7 @@ const SCHEMA_STATEMENTS = [
     provider_id TEXT NOT NULL REFERENCES users(id),
     rating      INTEGER NOT NULL,
     comment     TEXT,
-    created_at  TEXT DEFAULT (datetime('now'))
+    created_at  TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS notifications (
     id         TEXT PRIMARY KEY,
@@ -159,20 +147,20 @@ const SCHEMA_STATEMENTS = [
     body       TEXT,
     is_read    INTEGER DEFAULT 0,
     ref_id     TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS service_favorites (
     user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     service_id TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (user_id, service_id)
   )`,
   `CREATE TABLE IF NOT EXISTS email_verifications (
     id         TEXT PRIMARY KEY,
     user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     code_hash  TEXT NOT NULL,
-    expires_at TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE INDEX IF NOT EXISTS idx_email_verifications_user ON email_verifications(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_services_provider ON services(provider_id)`,
@@ -184,16 +172,10 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_notifs_user       ON notifications(user_id, is_read)`,
 ];
 
-const MIGRATIONS = [
-  `ALTER TABLE users ADD COLUMN is_verified_student INTEGER DEFAULT 0`,
-  `ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1`,
-  `ALTER TABLE users ADD COLUMN deleted_at TEXT`,
-];
-
 async function seed() {
   const { v4: uuidv4 } = require('uuid');
   const row = await get('SELECT COUNT(*) AS n FROM categories');
-  if (row && row.n > 0) return;
+  if (row && parseInt(row.n) > 0) return;
 
   const cats = [
     { name: 'Coding Lessons',     icon: 'code',              slug: 'coding-lessons'     },
@@ -212,7 +194,7 @@ async function seed() {
 
   for (const c of cats) {
     await run(
-      'INSERT OR IGNORE INTO categories (id,name,icon,slug) VALUES (?,?,?,?)',
+      'INSERT INTO categories (id,name,icon,slug) VALUES (?,?,?,?) ON CONFLICT DO NOTHING',
       [uuidv4(), c.name, c.icon, c.slug]
     );
   }
@@ -220,21 +202,49 @@ async function seed() {
 }
 
 async function initDB() {
-  const dbPath = path.resolve(__dirname, '../../tamamdir.db');
-  db = new DatabaseSync(dbPath);
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
   for (const stmt of SCHEMA_STATEMENTS) {
-    db.exec(stmt);
+    await pool.query(stmt);
   }
 
-  // Run migrations safely (ignore "duplicate column" errors for existing DBs)
-  for (const migration of MIGRATIONS) {
-    try { db.exec(migration); } catch {}
-  }
-
-  // Auto-set is_verified_student based on email domain
-  await run(`
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified_student INTEGER DEFAULT 0'
+  );
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active INTEGER DEFAULT 1'
+  );
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ'
+  );
+  await pool.query(
+    'ALTER TABLE conversations ADD COLUMN IF NOT EXISTS service_id TEXT REFERENCES services(id)'
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS conversation_service_arrangements (
+      conversation_id      TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      service_id           TEXT NOT NULL REFERENCES services(id),
+      cancel_count         INTEGER DEFAULT 0,
+      customer_cancel_count INTEGER DEFAULT 0,
+      provider_cancel_count INTEGER DEFAULT 0,
+      banned_until         TIMESTAMPTZ,
+      banned_user_id       TEXT REFERENCES users(id),
+      updated_at           TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (conversation_id, service_id)
+    )
+  `);
+  await pool.query(
+    'ALTER TABLE conversation_service_arrangements ADD COLUMN IF NOT EXISTS customer_cancel_count INTEGER DEFAULT 0'
+  );
+  await pool.query(
+    'ALTER TABLE conversation_service_arrangements ADD COLUMN IF NOT EXISTS provider_cancel_count INTEGER DEFAULT 0'
+  );
+  await pool.query(`
+    UPDATE conversation_service_arrangements
+    SET customer_cancel_count = cancel_count
+    WHERE customer_cancel_count = 0 AND cancel_count > 0
+  `);
+  await pool.query(`
     UPDATE users SET is_verified_student = 1
     WHERE is_verified_student = 0
       AND (
@@ -244,7 +254,7 @@ async function initDB() {
   `);
 
   await seed();
-  console.log(`📦  SQLite connected: ${dbPath}`);
+  console.log(`📦  PostgreSQL connected: ${process.env.DATABASE_URL}`);
 }
 
 module.exports = { initDB, run, get, all };
