@@ -1,0 +1,16 @@
+{
+  "_note": "Her satıra seed-assets/ içindeki dosya adını yaz. Boş bırakırsan slug.jpg / slug.png otomatik aranır (ör. tennis-coaching.jpg). Tam URL de verebilirsin (https://...).",
+
+  "tennis-coaching": "",
+  "coding-lessons": "",
+  "custom-knitting": "",
+  "calculus-tutoring": "",
+  "photography": "",
+  "instrument-lessons": "",
+  "graphic-design": "",
+  "language-exchange": "",
+  "handmade-goods": "",
+  "pet-sitting": "",
+  "house-cleaning": "",
+  "nail-art": ""
+}
