@@ -38,6 +38,7 @@ export interface Service {
   priceUnit: string;
   coverImageId?: string;
   image: string;
+  images?: string[];
   tags: string[];
   deliveryDays: number;
   location: string;

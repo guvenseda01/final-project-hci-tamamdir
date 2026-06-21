@@ -38,6 +38,7 @@ export default function ServiceDetailPage() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [reviewableOrderId, setReviewableOrderId] = useState<string | null>(null);
   const [showReviewForm, setShowReviewForm] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -138,10 +139,18 @@ export default function ServiceDetailPage() {
             participantId: service.providerId,
             participantName: service.providerName,
             participantAvatar: service.providerAvatar,
-            service_id: service.id,
-            service_title: service.title,
+            lastMessage: "",
+            lastTime: "",
+            unread: false,
+            messages: [],
           },
-          serviceId: service.id,
+          serviceContext: {
+            id: service.id,
+            title: service.title,
+            price: service.price,
+            image: service.image,
+            providerId: service.providerId,
+          },
         },
       });
     } catch {
@@ -229,11 +238,43 @@ export default function ServiceDetailPage() {
       <main className="mt-[60px]">
         {/* Hero Image */}
         <section className="relative w-full aspect-[4/3] bg-surface-container-highest overflow-hidden">
-          <img
-            src={service.image}
-            alt={service.title}
-            className="w-full h-full object-cover"
-          />
+          {(() => {
+            const imgs = service.images?.length ? service.images : [service.image];
+            return (
+              <>
+                <img
+                  src={imgs[activeImageIndex]}
+                  alt={service.title}
+                  className="w-full h-full object-cover"
+                />
+                {imgs.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setActiveImageIndex((i) => (i - 1 + imgs.length) % imgs.length)}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 flex items-center justify-center"
+                    >
+                      <span className="material-symbols-outlined text-white text-sm">chevron_left</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveImageIndex((i) => (i + 1) % imgs.length)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 flex items-center justify-center"
+                    >
+                      <span className="material-symbols-outlined text-white text-sm">chevron_right</span>
+                    </button>
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+                      {imgs.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setActiveImageIndex(i)}
+                          className={`w-1.5 h-1.5 rounded-full transition-all ${i === activeImageIndex ? "bg-white w-3" : "bg-white/50"}`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          })()}
         </section>
 
         {/* Main Info Card */}
@@ -311,25 +352,6 @@ export default function ServiceDetailPage() {
               <p className="font-bold text-sm text-on-surface">Özel</p>
               <p className="text-xs text-on-surface-variant">Renk Seçimi</p>
             </div>
-          </div>
-        </section>
-
-        {/* Portfolio */}
-        <section className="mt-xl">
-          <div className="px-margin-mobile flex justify-between items-center mb-md">
-            <h2 className="font-bold text-lg text-on-surface">Portfolyo</h2>
-            <button className="text-primary font-bold text-sm">Tümünü Gör</button>
-          </div>
-          <div className="flex gap-md overflow-x-auto px-margin-mobile no-scrollbar pb-1">
-            {[`${service.id}-p1`, `${service.id}-p2`, `${service.id}-p3`].map((seed, i) => (
-              <div key={i} className="min-w-[140px] aspect-square rounded-xl overflow-hidden bg-surface-container border border-slate-100 flex-shrink-0">
-                <img
-                  src={`https://picsum.photos/seed/${seed}/200/200`}
-                  alt={`Portfolyo ${i + 1}`}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ))}
           </div>
         </section>
 

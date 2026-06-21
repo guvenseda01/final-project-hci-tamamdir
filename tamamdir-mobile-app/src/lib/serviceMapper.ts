@@ -71,6 +71,7 @@ export function mapApiService(s: ApiService): Service {
     reviewCount: Number(s.review_count) || 0,
     orderCount: Number(s.order_count) || 0,
     image: resolveImage(s),
+    images: s.images?.map((i) => i.image_url) ?? [resolveImage(s)],
     tags: [s.category_name],
     deliveryDays: s.delivery_days ?? 1,
     location: "",
