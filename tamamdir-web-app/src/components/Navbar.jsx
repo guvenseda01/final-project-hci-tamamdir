@@ -3,8 +3,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { Bell, Mail, Search, Shield, Heart } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
+import { usePreferences } from '../context/PreferencesContext'
 import TamamdirLogo from './TamamdirLogo'
 import ProfileMenuDropdown from './ProfileMenuDropdown'
+import LanguageToggle from './LanguageToggle'
 import api from '../lib/api'
 import { getSocket } from '../lib/socket'
 
@@ -12,6 +14,7 @@ export default function Navbar() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { t } = usePreferences()
   const [unreadCount, setUnreadCount] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -78,7 +81,7 @@ export default function Navbar() {
               type="search"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search services..."
+              placeholder={t('navbar.searchPlaceholder')}
               className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-full min-w-0"
             />
           </form>
@@ -88,8 +91,8 @@ export default function Navbar() {
             <Link
               to="/admin/reports"
               className={iconBtn(location.pathname.startsWith('/admin'))}
-              aria-label="Admin reports"
-              title="Admin reports"
+              aria-label={t('navbar.adminReports')}
+              title={t('navbar.adminReports')}
             >
               <Shield className="w-5 h-5" />
             </Link>
@@ -97,7 +100,7 @@ export default function Navbar() {
           <Link
             to="/messages"
             className={iconBtn(location.pathname.startsWith('/messages'))}
-            aria-label="Messages"
+            aria-label={t('navbar.messages')}
           >
             <Mail className="w-5 h-5" />
           </Link>
@@ -105,7 +108,7 @@ export default function Navbar() {
           <Link
             to="/favorites"
             className={iconBtn(location.pathname === '/favorites')}
-            aria-label="Favorites"
+            aria-label={t('navbar.favorites')}
           >
             <Heart className="w-5 h-5" />
           </Link>
@@ -113,7 +116,7 @@ export default function Navbar() {
           <Link
             to="/notifications"
             className={iconBtn(location.pathname === '/notifications')}
-            aria-label="Notifications"
+            aria-label={t('navbar.notifications')}
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
@@ -127,10 +130,11 @@ export default function Navbar() {
             to="/services/new"
             className="hidden sm:inline-flex ml-1 bg-green-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-green-dark transition-colors whitespace-nowrap"
           >
-            Add service
+            {t('navbar.addService')}
           </Link>
 
           <ProfileMenuDropdown />
+          <LanguageToggle />
           </div>
         </div>
       </div>

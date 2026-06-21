@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { FavoritesProvider } from './context/FavoritesContext'
+import { PreferencesProvider } from './context/PreferencesContext'
 import AppLayout from './components/AppLayout'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -19,6 +20,7 @@ import VerifyEmailPage from './pages/VerifyEmailPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import RegisterWelcomePage from './pages/RegisterWelcomePage'
+import AuthShell from './components/AuthShell'
 
 function postAuthPath(user) {
   return user?.interests?.length ? '/home' : '/onboarding'
@@ -51,15 +53,16 @@ function AdminRoute({ children }) {
 export default function App() {
   return (
     <AuthProvider>
+      <PreferencesProvider>
       <FavoritesProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
-          <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
-          <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/register/welcome" element={<ProtectedRoute skipInterestCheck><RegisterWelcomePage /></ProtectedRoute>} />
+          <Route path="/login" element={<GuestRoute><AuthShell><LoginPage /></AuthShell></GuestRoute>} />
+          <Route path="/register" element={<GuestRoute><AuthShell><RegisterPage /></AuthShell></GuestRoute>} />
+          <Route path="/verify-email" element={<AuthShell><VerifyEmailPage /></AuthShell>} />
+          <Route path="/forgot-password" element={<GuestRoute><AuthShell><ForgotPasswordPage /></AuthShell></GuestRoute>} />
+          <Route path="/reset-password" element={<AuthShell><ResetPasswordPage /></AuthShell>} />
+          <Route path="/register/welcome" element={<ProtectedRoute skipInterestCheck><AuthShell><RegisterWelcomePage /></AuthShell></ProtectedRoute>} />
           <Route element={<AppLayout />}>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/onboarding" element={<ProtectedRoute skipInterestCheck><OnboardingPage /></ProtectedRoute>} />
@@ -77,6 +80,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
       </FavoritesProvider>
+      </PreferencesProvider>
     </AuthProvider>
   )
 }

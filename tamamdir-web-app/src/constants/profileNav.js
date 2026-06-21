@@ -8,10 +8,10 @@ import {
 } from 'lucide-react'
 
 export const PROFILE_TABS = [
-  { id: 'personal',        label: 'Personal Info',      icon: User },
-  { id: 'personalization', label: 'Personalization',    icon: Sliders },
-  { id: 'services',        label: 'Service Management', icon: Wrench },
-  { id: 'orders',          label: 'Orders',             icon: ShoppingBag },
-  { id: 'security',        label: 'Security',           icon: Shield },
-  { id: 'account',         label: 'Account Management', icon: Settings },
+  { id: 'personal',        labelKey: 'profile.tab.personal',        icon: User },
+  { id: 'personalization', labelKey: 'profile.tab.personalization', icon: Sliders },
+  { id: 'services',        labelKey: 'profile.tab.services',        icon: Wrench },
+  { id: 'orders',          labelKey: 'profile.tab.orders',          icon: ShoppingBag },
+  { id: 'security',        labelKey: 'profile.tab.security',        icon: Shield },
+  { id: 'account',         labelKey: 'profile.tab.account',         icon: Settings },
 ]

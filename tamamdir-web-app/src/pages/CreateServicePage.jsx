@@ -3,21 +3,18 @@ import { useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, AlertCircle, Loader2, Plus, ImagePlus, X } from 'lucide-react'
 import api from '../lib/api'
 import { LOCATION_OPTIONS } from '../lib/utils'
+import { usePreferences } from '../context/PreferencesContext'
+import { tCategory } from '../lib/i18n'
 
 const MAX_IMAGES = 10
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024
 
-const PRICE_UNITS = [
-  { value: 'session', label: 'Per session' },
-  { value: 'hour',    label: 'Per hour'    },
-  { value: 'day',     label: 'Per day'     },
-  { value: 'item',    label: 'Per item'    },
-  { value: 'piece',   label: 'Per piece'   },
-]
+const PRICE_UNITS = ['session', 'hour', 'day', 'item', 'piece']
 
 export default function CreateServicePage() {
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
+  const { t } = usePreferences()
 
   const [categories, setCategories] = useState([])
   const [loadingCats, setLoadingCats] = useState(true)
@@ -45,13 +42,13 @@ export default function CreateServicePage() {
     api.get('/api/categories')
       .then(data => {
         const list = Array.isArray(data) ? data : [];
-        const others = list.filter(c => c.name === 'Other');
-        const rest = list.filter(c => c.name !== 'Other');
+        const others = list.filter(c => c.slug === 'others' || c.name === 'Other');
+        const rest = list.filter(c => c.slug !== 'others' && c.name !== 'Other');
         setCategories([...rest, ...others]);
       })
-      .catch(() => setError('Could not load categories.'))
+      .catch(() => setError(t('createService.loadCategoriesFailed')))
       .finally(() => setLoadingCats(false))
-  }, [])
+  }, [t])
 
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files ?? [])
@@ -61,18 +58,18 @@ export default function CreateServicePage() {
     setError('')
     const remaining = MAX_IMAGES - images.length
     if (remaining <= 0) {
-      setError(`You can upload up to ${MAX_IMAGES} photos.`)
+      setError(t('createService.maxPhotos', { max: MAX_IMAGES }))
       return
     }
 
     const toAdd = []
     for (const file of files.slice(0, remaining)) {
       if (!file.type.startsWith('image/')) {
-        setError('Only image files are allowed.')
+        setError(t('createService.imagesOnly'))
         continue
       }
       if (file.size > MAX_FILE_SIZE) {
-        setError('Each photo must be 10 MB or smaller.')
+        setError(t('createService.fileSizeMax'))
         continue
       }
       toAdd.push({ file, preview: URL.createObjectURL(file) })
@@ -105,15 +102,15 @@ export default function CreateServicePage() {
     const parsedDays = parseInt(deliveryDays, 10)
 
     if (!trimmedTitle) {
-      setError('Title is required.')
+      setError(t('createService.titleRequired'))
       return
     }
     if (!categoryId) {
-      setError('Please select a category.')
+      setError(t('createService.categoryRequired'))
       return
     }
     if (!parsedPrice || parsedPrice < 1) {
-      setError('Price must be at least ₺1.')
+      setError(t('createService.priceMin'))
       return
     }
 
@@ -146,7 +143,7 @@ export default function CreateServicePage() {
         },
       })
     } catch (err) {
-      const msg = err.data?.errors?.[0]?.msg ?? err.message ?? 'Failed to create service.'
+      const msg = err.data?.errors?.[0]?.msg ?? err.message ?? t('createService.failed')
       setError(msg)
       setSubmitting(false)
     }
@@ -161,13 +158,13 @@ export default function CreateServicePage() {
           className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Service Management
+          {t('createService.back')}
         </Link>
 
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-coffee mb-1">Add New Service</h1>
+          <h1 className="text-3xl font-bold text-coffee mb-1">{t('createService.title')}</h1>
           <p className="text-gray-500 text-sm">
-            Create a listing so other students can find and book your service.
+            {t('createService.subtitle')}
           </p>
         </div>
 
@@ -181,10 +178,10 @@ export default function CreateServicePage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Photos
+              {t('createService.photos')}
             </label>
             <p className="text-xs text-gray-400 mb-3">
-              Add up to {MAX_IMAGES} photos. The first photo will be used as the cover image.
+              {t('createService.photosHint', { max: MAX_IMAGES })}
             </p>
 
             <input
@@ -203,7 +200,7 @@ export default function CreateServicePage() {
                     <img src={img.preview} alt="" className="w-full h-full object-cover" />
                     {index === 0 && (
                       <span className="absolute top-1.5 left-1.5 bg-green-primary text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
-                        Cover
+                        {t('common.cover')}
                       </span>
                     )}
                     <button
@@ -226,16 +223,16 @@ export default function CreateServicePage() {
               >
                 <ImagePlus className="w-8 h-8" />
                 <span className="text-sm font-medium">
-                  {images.length === 0 ? 'Add photos' : 'Add more photos'}
+                  {images.length === 0 ? t('createService.addPhotos') : t('createService.addMorePhotos')}
                 </span>
-                <span className="text-xs">{images.length}/{MAX_IMAGES} uploaded</span>
+                <span className="text-xs">{t('createService.uploaded', { current: images.length, max: MAX_IMAGES })}</span>
               </button>
             )}
           </div>
 
           <div>
             <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1.5">
-              Title <span className="text-red-400">*</span>
+              {t('createService.titleLabel')} <span className="text-red-400">*</span>
             </label>
             <input
               id="title"
@@ -243,14 +240,14 @@ export default function CreateServicePage() {
               value={title}
               onChange={e => setTitle(e.target.value)}
               maxLength={120}
-              placeholder="e.g. Python Coding Lessons"
+              placeholder={t('createService.titlePlaceholder')}
               className="input-field"
             />
           </div>
 
           <div>
             <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1.5">
-              Description
+              {t('createService.description')}
             </label>
             <textarea
               id="description"
@@ -258,14 +255,14 @@ export default function CreateServicePage() {
               onChange={e => setDescription(e.target.value)}
               rows={4}
               maxLength={2000}
-              placeholder="Describe what you offer, your experience, and what students can expect…"
+              placeholder={t('createService.descriptionPlaceholder')}
               className="input-field resize-none"
             />
           </div>
 
           <div>
             <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1.5">
-              Category <span className="text-red-400">*</span>
+              {t('createService.category')} <span className="text-red-400">*</span>
             </label>
             <select
               id="category"
@@ -274,9 +271,9 @@ export default function CreateServicePage() {
               disabled={loadingCats}
               className="input-field"
             >
-              <option value="">Select a category</option>
+              <option value="">{t('createService.selectCategory')}</option>
               {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                <option key={cat.id} value={cat.id}>{tCategory(t, cat)}</option>
               ))}
             </select>
           </div>
@@ -284,7 +281,7 @@ export default function CreateServicePage() {
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Price (₺) <span className="text-red-400">*</span>
+                {t('createService.price')} <span className="text-red-400">*</span>
               </label>
               <input
                 id="price"
@@ -299,7 +296,7 @@ export default function CreateServicePage() {
             </div>
             <div>
               <label htmlFor="priceUnit" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Price unit
+                {t('createService.priceUnit')}
               </label>
               <select
                 id="priceUnit"
@@ -308,7 +305,7 @@ export default function CreateServicePage() {
                 className="input-field"
               >
                 {PRICE_UNITS.map(u => (
-                  <option key={u.value} value={u.value}>{u.label}</option>
+                  <option key={u} value={u}>{t(`priceUnit.${u}`)}</option>
                 ))}
               </select>
             </div>
@@ -316,7 +313,7 @@ export default function CreateServicePage() {
 
           <div>
             <label htmlFor="locationType" className="block text-sm font-medium text-gray-700 mb-1.5">
-              Meeting location
+              {t('createService.meetingLocation')}
             </label>
             <select
               id="locationType"
@@ -325,15 +322,15 @@ export default function CreateServicePage() {
               className="input-field"
             >
               {LOCATION_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <option key={opt.value} value={opt.value}>{t(`location.${opt.value}`)}</option>
               ))}
             </select>
-            <p className="text-xs text-gray-400 mt-1.5">Where will this service take place?</p>
+            <p className="text-xs text-gray-400 mt-1.5">{t('createService.meetingLocationHint')}</p>
           </div>
 
           <div>
             <label htmlFor="deliveryDays" className="block text-sm font-medium text-gray-700 mb-1.5">
-              Delivery time (days)
+              {t('createService.deliveryTime')}
             </label>
             <input
               id="deliveryDays"
@@ -344,7 +341,7 @@ export default function CreateServicePage() {
               onChange={e => setDeliveryDays(e.target.value)}
               className="input-field"
             />
-            <p className="text-xs text-gray-400 mt-1.5">How many days until the service is delivered.</p>
+            <p className="text-xs text-gray-400 mt-1.5">{t('createService.deliveryTimeHint')}</p>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
@@ -353,7 +350,7 @@ export default function CreateServicePage() {
               state={{ tab: 'services' }}
               className="btn-outline text-sm py-2.5"
             >
-              Cancel
+              {t('common.cancel')}
             </Link>
             <button
               type="submit"
@@ -364,7 +361,7 @@ export default function CreateServicePage() {
                 ? <Loader2 className="w-4 h-4 animate-spin" />
                 : <Plus className="w-4 h-4" />
               }
-              {submitting ? 'Creating…' : 'Create Service'}
+              {submitting ? t('createService.creating') : t('createService.submit')}
             </button>
           </div>
         </form>
