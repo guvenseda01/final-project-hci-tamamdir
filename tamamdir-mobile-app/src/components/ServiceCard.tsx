@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { usePreferences } from "../context/PreferencesContext";
 import type { Service } from "../data/types";
 
 interface ServiceCardProps {
@@ -7,6 +8,7 @@ interface ServiceCardProps {
 
 export default function ServiceCard({ service }: ServiceCardProps) {
   const navigate = useNavigate();
+  const { t } = usePreferences();
 
   return (
     <div
@@ -26,7 +28,7 @@ export default function ServiceCard({ service }: ServiceCardProps) {
         </div>
         {service.providerVerified && (
           <div className="absolute bottom-3 left-3 bg-secondary-container text-on-secondary-container px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
-            Doğrulanmış
+            {t("service.verified")}
           </div>
         )}
       </div>
@@ -57,7 +59,7 @@ export default function ServiceCard({ service }: ServiceCardProps) {
             }}
             className="bg-primary text-on-primary px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1 shadow-md active:bg-on-primary-fixed-variant transition-colors"
           >
-            Detay
+            {t("service.detail")}
             <span className="material-symbols-outlined text-sm">arrow_forward</span>
           </button>
         </div>

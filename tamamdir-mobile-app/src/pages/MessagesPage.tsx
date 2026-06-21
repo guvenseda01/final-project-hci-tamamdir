@@ -5,6 +5,7 @@ import NotificationsDropdown from "../components/NotificationsDropdown";
 import ProfileMenuDropdown from "../components/ProfileMenuDropdown";
 import BottomNav from "../components/BottomNav";
 import ChatView from "./ChatView";
+import { usePreferences } from "../context/PreferencesContext";
 import type { Conversation } from "../data/types";
 import api from "../lib/api";
 
@@ -27,6 +28,7 @@ function loadServiceContext(convId: string): ServiceContext | null {
 
 export default function MessagesPage() {
   const location = useLocation();
+  const { t, preferences } = usePreferences();
   const locationState = (location.state as any) ?? {};
   const [search, setSearch] = useState("");
 
@@ -53,7 +55,7 @@ export default function MessagesPage() {
           participantAvatar: c.other_avatar ?? "",
           lastMessage: c.last_message ?? "",
           lastTime: (c.last_msg_at ?? c.last_message_at)
-            ? new Date(c.last_msg_at ?? c.last_message_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+            ? new Date(c.last_msg_at ?? c.last_message_at).toLocaleTimeString(preferences.language === "tr" ? "tr-TR" : preferences.language === "de" ? "de-DE" : preferences.language === "es" ? "es-ES" : "en-US", { hour: "2-digit", minute: "2-digit" })
             : "",
           unread: (c.unread_count ?? 0) > 0,
           messages: [],
@@ -101,8 +103,8 @@ export default function MessagesPage() {
 
       <main className="pt-20 px-gutter pb-24 max-w-md mx-auto">
         <div className="mb-gutter">
-          <h2 className="font-bold text-xl text-on-surface">Konuşmalar</h2>
-          <p className="text-on-surface-variant text-xs mt-0.5">Hizmet taleplerinizden haberdar olun</p>
+          <h2 className="font-bold text-xl text-on-surface">{t("messages.title")}</h2>
+          <p className="text-on-surface-variant text-xs mt-0.5">{t("messages.sub")}</p>
         </div>
 
         {/* Search */}
@@ -113,7 +115,7 @@ export default function MessagesPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-12 pr-4 py-3 bg-surface-container-low border-none rounded-xl text-body-md focus:ring-2 focus:ring-primary/30 transition-all outline-none"
-            placeholder="Konuşma ara..."
+            placeholder={t("messages.searchPlaceholder")}
           />
         </div>
 

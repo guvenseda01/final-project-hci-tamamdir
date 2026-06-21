@@ -5,6 +5,7 @@ import HeaderActionButtons from "./HeaderActionButtons";
 
 interface TopBarProps {
   showBack?: boolean;
+  backTo?: string;
   title?: string;
   rightContent?: React.ReactNode;
   showNotifications?: boolean;
@@ -14,6 +15,7 @@ interface TopBarProps {
 
 export default function TopBar({
   showBack,
+  backTo,
   title,
   rightContent,
   showNotifications = true,
@@ -45,7 +47,7 @@ export default function TopBar({
         {showBack ? (
           <button
             type="button"
-            onClick={() => navigate(-1)}
+            onClick={() => (backTo ? navigate(backTo) : navigate(-1))}
             className="p-1 -ml-1 rounded-full hover:bg-slate-100 active:scale-95 transition-all"
           >
             <span className="material-symbols-outlined text-on-surface">arrow_back</span>
