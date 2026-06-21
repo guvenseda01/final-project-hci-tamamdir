@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import BottomNav from "../components/BottomNav";
+import ServiceImage from "../components/ServiceImage";
 
 import { useAuth } from "../context/AuthContext";
 
@@ -255,7 +256,12 @@ export default function ProfileManagePage() {
 
                 >
 
-                  <img src={service.image} alt={service.title} className="w-full h-full object-cover" />
+                  <ServiceImage
+                    src={service.image}
+                    serviceId={service.id}
+                    alt={service.title}
+                    className="w-full h-full object-cover"
+                  />
 
                 </button>
 

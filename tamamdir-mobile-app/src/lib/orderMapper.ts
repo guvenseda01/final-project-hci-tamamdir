@@ -1,4 +1,5 @@
 import type { ServiceHistory } from "../data/types";
+import { resolveMediaUrl } from "./mediaUrl";
 
 export type OrderAction = "accept" | "start" | "complete" | "cancel";
 
@@ -24,7 +25,9 @@ export function mapOrder(o: Record<string, unknown>, userId?: string): ServiceHi
     serviceTitle: String(o.service_title ?? o.title ?? "Hizmet"),
     amount: `₺${Number(o.price_at_order ?? o.amount ?? o.price ?? 0)}`,
     partnerName: isBuyer ? String(o.provider_name ?? "") : String(o.buyer_name ?? ""),
-    partnerAvatar: isBuyer ? String(o.provider_avatar ?? "") : String(o.buyer_avatar ?? ""),
+    partnerAvatar: resolveMediaUrl(
+      isBuyer ? (o.provider_avatar as string | null) : (o.buyer_avatar as string | null)
+    ),
     status,
     date: o.created_at ? new Date(String(o.created_at)).toLocaleDateString("tr-TR") : "",
     type: isBuyer ? "requested" : "provided",

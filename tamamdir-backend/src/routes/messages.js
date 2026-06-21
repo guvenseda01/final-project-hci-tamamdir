@@ -1056,9 +1056,40 @@ router.post(
         ? conv.participant_b
         : conv.participant_a;
 
+      const sender = await get('SELECT full_name FROM users WHERE id = ?', [req.user.id]);
+      const io = req.app.get('io');
+
       let order = null;
       if (confirms.length >= 2) {
         order = await finalizeTamamdirOrder(req.params.id, service_id);
+      } else if (confirms.length === 1) {
+        await createNotification({
+          user_id: otherId,
+          type: 'order_tamamdir_pending',
+          title: `${sender?.full_name ?? 'Birisi'} Tamamdır dedi`,
+          body: `${service.title} — sen de onaylamak için sohbete git.`,
+          ref_id: req.params.id,
+          io,
+        });
+      }
+
+      if (order) {
+        await createNotification({
+          user_id: otherId,
+          type: 'order_completed',
+          title: 'Anlaşma tamam!',
+          body: `${service.title} için geri bildirim bırakabilirsin.`,
+          ref_id: order.id,
+          io,
+        });
+        await createNotification({
+          user_id: req.user.id,
+          type: 'order_completed',
+          title: 'Anlaşma tamam!',
+          body: `${service.title} için geri bildirim bırakabilirsin.`,
+          ref_id: order.id,
+          io,
+        });
       }
 
       const confirmedUserIds = confirms.map(c => c.user_id);

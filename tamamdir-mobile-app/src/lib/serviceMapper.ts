@@ -1,4 +1,5 @@
 import type { Service } from "../data/types";
+import { resolveMediaUrl } from "./mediaUrl";
 
 export interface ApiService {
   id: string;
@@ -35,11 +36,18 @@ function unitLabel(unit: string) {
 }
 
 function resolveImage(s: ApiService): string {
-  if (s.cover_image) return s.cover_image;
-  const cover = s.images?.find((i) => i.is_cover === 1 || i.is_cover === true);
-  if (cover) return cover.image_url;
-  if (s.images?.[0]) return s.images[0].image_url;
-  return `https://picsum.photos/seed/${s.id}/600/400`;
+  const candidates = [
+    s.cover_image,
+    s.images?.find((i) => i.is_cover === 1 || i.is_cover === true)?.image_url,
+    s.images?.[0]?.image_url,
+  ];
+  for (const candidate of candidates) {
+    if (candidate) {
+      const url = resolveMediaUrl(candidate);
+      if (url) return url;
+    }
+  }
+  return "";
 }
 
 function mapStatus(isActive: 0 | 1 | boolean | undefined): Service["status"] {
@@ -65,13 +73,15 @@ export function mapApiService(s: ApiService): Service {
     providerId: s.provider_id,
     providerName: s.provider_name,
     providerDepartment: s.provider_department ?? "",
-    providerAvatar: s.provider_avatar ?? `https://i.pravatar.cc/150?u=${s.provider_id}`,
+    providerAvatar: resolveMediaUrl(s.provider_avatar),
     providerVerified: s.provider_verified === 1,
     rating: Number(s.rating) || 0,
     reviewCount: Number(s.review_count) || 0,
     orderCount: Number(s.order_count) || 0,
     image: resolveImage(s),
-    images: s.images?.map((i) => i.image_url) ?? [resolveImage(s)],
+    images:
+      s.images?.map((i) => resolveMediaUrl(i.image_url)).filter(Boolean) ??
+      (resolveImage(s) ? [resolveImage(s)] : []),
     tags: [s.category_name],
     deliveryDays: s.delivery_days ?? 1,
     location: "",

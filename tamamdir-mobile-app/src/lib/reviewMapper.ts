@@ -1,4 +1,5 @@
 import type { Review } from "../data/types";
+import { resolveMediaUrl } from "./mediaUrl";
 
 export interface ApiReview {
   id: string;
@@ -17,7 +18,7 @@ export function mapReview(r: ApiReview): Review {
     serviceId: r.service_id,
     reviewerId: r.reviewer_id,
     reviewerName: r.reviewer_name,
-    reviewerAvatar: r.reviewer_avatar ?? `https://i.pravatar.cc/150?u=${r.reviewer_id}`,
+    reviewerAvatar: resolveMediaUrl(r.reviewer_avatar),
     rating: Number(r.rating) || 0,
     comment: r.comment ?? "",
     date: new Date(r.created_at).toLocaleDateString("tr-TR"),

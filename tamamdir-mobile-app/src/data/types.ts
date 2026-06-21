@@ -67,7 +67,7 @@ export interface Conversation {
   id: string;
   participantId: string;
   participantName: string;
-  participantAvatar: string;
+  participantAvatar: string | null;
   lastMessage: string;
   lastTime: string;
   unread: boolean;

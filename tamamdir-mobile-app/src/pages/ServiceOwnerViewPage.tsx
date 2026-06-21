@@ -6,6 +6,7 @@ import { mapReviews } from "../lib/reviewMapper";
 import api from "../lib/api";
 import NotificationsDropdown from "../components/NotificationsDropdown";
 import ProfileMenuDropdown from "../components/ProfileMenuDropdown";
+import ServiceImage from "../components/ServiceImage";
 import type { Review, Service } from "../data/types";
 
 export default function ServiceOwnerViewPage() {
@@ -81,7 +82,12 @@ export default function ServiceOwnerViewPage() {
 
       <main className="mt-[60px]">
         <div className="relative w-full h-[280px] overflow-hidden">
-          <img src={service.image} alt={service.title} className="w-full h-full object-cover" />
+          <ServiceImage
+            src={service.image}
+            serviceId={service.id}
+            alt={service.title}
+            className="w-full h-full object-cover"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
           <div className="absolute bottom-4 left-margin-mobile">
             <span className="bg-primary-fixed text-on-primary-fixed px-3 py-1 rounded-full font-label-sm text-label-sm uppercase tracking-wider">
