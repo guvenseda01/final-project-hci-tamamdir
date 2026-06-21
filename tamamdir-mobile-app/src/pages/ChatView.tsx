@@ -174,6 +174,30 @@ export default function ChatView({ conversation, serviceContext, onBack }: ChatV
     }
   }
 
+  async function handleCancelOrder() {
+    const orderId = activeOrder?.id ?? pendingOrder?.id;
+    if (!orderId || orderActionLoading) return;
+    if (!window.confirm("Bu siparişi iptal etmek istediğine emin misin?")) return;
+    setOrderActionLoading(true);
+    try {
+      await api.patch(`/api/orders/${orderId}/cancel`);
+      setPendingOrder(null);
+      setActiveOrder(null);
+      setAcceptDone(false);
+      setToastMessage("Sipariş iptal edildi.");
+      setToastVisible(true);
+      await loadOrderState();
+    } catch (err: unknown) {
+      const msg = (err as { data?: { error?: string }; message?: string }).data?.error
+        ?? (err as { message?: string }).message
+        ?? "İptal edilemedi.";
+      setToastMessage(msg);
+      setToastVisible(true);
+    } finally {
+      setOrderActionLoading(false);
+    }
+  }
+
   async function runProviderAction(action: "accept" | "start" | "complete") {
     const orderId =
       action === "accept" ? pendingOrder?.id : activeOrder?.id;
@@ -230,9 +254,16 @@ export default function ChatView({ conversation, serviceContext, onBack }: ChatV
     isProviderView && activeOrder?.status === "accepted";
   const showProviderComplete =
     isProviderView && activeOrder?.status === "in_progress";
+  const showCancelOrder =
+    displayOrder &&
+    ["pending", "accepted", "in_progress"].includes(displayOrder.status);
 
   const hasHeaderActions =
-    showBuyerOrderButton || showProviderAccept || showProviderStart || showProviderComplete;
+    showBuyerOrderButton ||
+    showProviderAccept ||
+    showProviderStart ||
+    showProviderComplete ||
+    showCancelOrder;
 
   const buyerStatusText =
     displayOrder?.status === "pending"
@@ -307,6 +338,16 @@ export default function ChatView({ conversation, serviceContext, onBack }: ChatV
                 disabled={placingOrder}
                 className="h-12 text-sm"
               />
+            )}
+            {showCancelOrder && (
+              <button
+                type="button"
+                onClick={handleCancelOrder}
+                disabled={orderActionLoading}
+                className="w-full h-11 rounded-xl border border-error/30 text-error font-bold text-sm disabled:opacity-60"
+              >
+                {orderActionLoading ? "İptal ediliyor..." : "Siparişi İptal Et"}
+              </button>
             )}
           </div>
         )}

@@ -7,12 +7,14 @@ import Toast from "../components/Toast";
 import type { ServiceHistory } from "../data/types";
 import api from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { mapOrder, ORDER_STATUS_LABEL } from "../lib/orderMapper";
+import { usePreferences } from "../context/PreferencesContext";
+import { mapOrder, ORDER_STATUS_LABEL, getOrderActions } from "../lib/orderMapper";
 
 type Tab = "requested" | "provided";
 
 export default function HistoryPage() {
   const { user } = useAuth();
+  const { t } = usePreferences();
   const [tab, setTab] = useState<Tab>("requested");
   const [history, setHistory] = useState<ServiceHistory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +22,7 @@ export default function HistoryPage() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
@@ -50,7 +53,7 @@ export default function HistoryPage() {
         rating: reviewRating,
         comment: reviewComment.trim() || undefined,
       });
-      setToastMessage("Yorumunuz kaydedildi.");
+      setToastMessage(t("history.reviewSaved"));
       setToastVisible(true);
       setReviewingId(null);
       setReviewComment("");
@@ -59,11 +62,32 @@ export default function HistoryPage() {
     } catch (err: unknown) {
       const msg = (err as { message?: string; data?: { error?: string } }).data?.error
         ?? (err as { message?: string }).message
-        ?? "Yorum kaydedilemedi.";
+        ?? t("history.reviewError");
       setToastMessage(msg);
       setToastVisible(true);
     } finally {
       setSubmittingReview(false);
+    }
+  }
+
+  async function cancelOrder(orderId: string) {
+    if (actionLoadingId) return;
+    const ok = window.confirm(t("history.cancelConfirm"));
+    if (!ok) return;
+    setActionLoadingId(orderId);
+    try {
+      await api.patch(`/api/orders/${orderId}/cancel`);
+      setToastMessage(t("history.cancelSuccess"));
+      setToastVisible(true);
+      await loadHistory();
+    } catch (err: unknown) {
+      const msg = (err as { data?: { error?: string }; message?: string }).data?.error
+        ?? (err as { message?: string }).message
+        ?? t("history.cancelError");
+      setToastMessage(msg);
+      setToastVisible(true);
+    } finally {
+      setActionLoadingId(null);
     }
   }
 
@@ -88,26 +112,26 @@ export default function HistoryPage() {
 
       <main className="pt-16 px-gutter pb-24 max-w-md mx-auto">
         <div className="mt-8 mb-6">
-          <h1 className="font-bold text-2xl text-on-surface">Hizmet Geçmişi</h1>
-          <p className="text-on-surface-variant text-sm">Tamamlanan kampüs görevlerinizi inceleyin</p>
+          <h1 className="font-bold text-2xl text-on-surface">{t("history.title")}</h1>
+          <p className="text-on-surface-variant text-sm">{t("history.sub")}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-sm mb-lg">
           <div className="bg-white p-md rounded-xl shadow-card border border-slate-50">
             <div className="flex items-center gap-base mb-xs">
               <span className="material-symbols-outlined text-primary text-xl">assignment_turned_in</span>
-              <span className="text-xs text-on-surface-variant">Tamamlanan</span>
+              <span className="text-xs text-on-surface-variant">{t("history.completed")}</span>
             </div>
             <p className="font-bold text-2xl text-on-surface">{totalCompleted}</p>
-            <p className="text-primary font-bold text-[10px]">Geçmiş hizmetler</p>
+            <p className="text-primary font-bold text-[10px]">{t("history.pastServices")}</p>
           </div>
           <div className="bg-white p-md rounded-xl shadow-card border border-slate-50">
             <div className="flex items-center gap-base mb-xs">
               <span className="material-symbols-outlined text-tertiary text-xl">payments</span>
-              <span className="text-xs text-on-surface-variant">Toplam Kazanç</span>
+              <span className="text-xs text-on-surface-variant">{t("history.earnings")}</span>
             </div>
             <p className="font-bold text-2xl text-on-surface">₺{totalEarnings.toLocaleString("tr-TR")}</p>
-            <p className="text-tertiary font-bold text-[10px]">Sağladığım hizmetler</p>
+            <p className="text-tertiary font-bold text-[10px]">{t("history.myProvided")}</p>
           </div>
         </div>
 
@@ -117,13 +141,13 @@ export default function HistoryPage() {
               className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white rounded-full shadow-sm transition-transform duration-300"
               style={{ transform: tab === "provided" ? "translateX(100%)" : "translateX(0)" }}
             />
-            {(["requested", "provided"] as Tab[]).map((t) => (
+            {(["requested", "provided"] as Tab[]).map((tabKey) => (
               <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`flex-1 py-3 text-center z-10 font-bold text-sm transition-colors ${tab === t ? "text-primary" : "text-on-surface-variant"}`}
+                key={tabKey}
+                onClick={() => setTab(tabKey)}
+                className={`flex-1 py-3 text-center z-10 font-bold text-sm transition-colors ${tab === tabKey ? "text-primary" : "text-on-surface-variant"}`}
               >
-                {t === "requested" ? "Talep Ettim" : "Sağladım"}
+                {tabKey === "requested" ? t("history.requested") : t("history.provided")}
               </button>
             ))}
           </div>
@@ -137,13 +161,15 @@ export default function HistoryPage() {
           ) : filtered.length === 0 ? (
             <div className="text-center py-16">
               <span className="material-symbols-outlined text-5xl text-outline-variant mb-2">history</span>
-              <p className="text-on-surface-variant">Henüz kayıt yok.</p>
+              <p className="text-on-surface-variant">{t("history.empty")}</p>
             </div>
           ) : (
             filtered.map((item) => {
               const statusInfo = ORDER_STATUS_LABEL[item.status];
               const canReview = item.type === "requested" && item.status === "completed" && !item.hasReview;
               const isReviewOpen = reviewingId === item.id;
+              const canCancel = getOrderActions(item).some((a) => a.action === "cancel");
+              const isActionLoading = actionLoadingId === item.id;
 
               return (
                 <div
@@ -166,7 +192,7 @@ export default function HistoryPage() {
                         <span className="font-bold text-sm text-on-surface flex-shrink-0">{item.amount}</span>
                       </div>
                       <p className="text-xs text-on-surface-variant mb-xs mt-0.5">
-                        {item.type === "requested" ? "Sağlayan" : "Müşteri"}: {item.partnerName}
+                        {item.type === "requested" ? t("history.provider") : t("history.customer")}: {item.partnerName}
                       </p>
                       {item.note && (
                         <p className="text-xs text-on-surface-variant mb-xs line-clamp-2 italic">
@@ -185,12 +211,25 @@ export default function HistoryPage() {
                         </span>
                         {item.hasReview && (
                           <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                            Yorumlandı
+                            {t("history.reviewed")}
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
+
+                  {canCancel && (
+                    <div className="px-md pb-md">
+                      <button
+                        type="button"
+                        disabled={isActionLoading}
+                        onClick={() => cancelOrder(item.id)}
+                        className="w-full py-2.5 rounded-xl border border-error/30 text-error font-bold text-sm disabled:opacity-60"
+                      >
+                        {isActionLoading ? "..." : t("history.cancel")}
+                      </button>
+                    </div>
+                  )}
 
                   {canReview && !isReviewOpen && (
                     <div className="px-md pb-md">
@@ -203,14 +242,14 @@ export default function HistoryPage() {
                         }}
                         className="w-full py-2.5 rounded-xl border-2 border-primary/20 text-primary font-bold text-sm active:bg-primary/5"
                       >
-                        Yorum Yap
+                        {t("history.review")}
                       </button>
                     </div>
                   )}
 
                   {isReviewOpen && (
                     <div className="px-md pb-md border-t border-slate-100 pt-md space-y-3">
-                      <p className="font-bold text-sm text-on-surface">Hizmeti değerlendir</p>
+                      <p className="font-bold text-sm text-on-surface">{t("history.reviewFormTitle")}</p>
                       <div className="flex gap-1">
                         {[1, 2, 3, 4, 5].map((star) => (
                           <button
@@ -230,7 +269,7 @@ export default function HistoryPage() {
                       <textarea
                         value={reviewComment}
                         onChange={(e) => setReviewComment(e.target.value)}
-                        placeholder="Deneyimini kısaca yaz (isteğe bağlı)"
+                        placeholder={t("history.reviewPlaceholder")}
                         rows={3}
                         className="w-full p-3 rounded-xl border border-outline-variant/30 text-sm resize-none outline-none focus:border-primary"
                       />
@@ -240,7 +279,7 @@ export default function HistoryPage() {
                           onClick={() => setReviewingId(null)}
                           className="flex-1 py-2.5 rounded-xl border border-outline-variant/30 font-bold text-sm text-on-surface-variant"
                         >
-                          Vazgeç
+                          {t("history.cancelReview")}
                         </button>
                         <button
                           type="button"
@@ -248,7 +287,7 @@ export default function HistoryPage() {
                           disabled={submittingReview}
                           className="flex-1 py-2.5 rounded-xl bg-primary text-on-primary font-bold text-sm disabled:opacity-60"
                         >
-                          {submittingReview ? "Kaydediliyor..." : "Gönder"}
+                          {submittingReview ? t("history.saving") : t("history.submitReview")}
                         </button>
                       </div>
                     </div>

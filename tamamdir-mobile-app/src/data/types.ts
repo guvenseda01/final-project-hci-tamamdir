@@ -1,14 +1,23 @@
+export interface UserInterest {
+  id: string;
+  name: string;
+  icon?: string;
+  slug?: string;
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
   department: string;
   year: string;
+  bio: string;
   avatar: string;
   verified: boolean;
   rating: number;
   completedServices: number;
   activeServices: number;
+  interests: UserInterest[];
 }
 
 export interface Service {

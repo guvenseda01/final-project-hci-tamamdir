@@ -27,6 +27,112 @@ body {
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+html.dark body {
+  background-color: #121416;
+  color: #e8ece9;
+}
+
+html.dark .bg-background,
+html.dark .bg-surface {
+  background-color: #121416 !important;
+}
+
+html.dark .bg-white,
+html.dark .bg-surface-container-lowest,
+html.dark .bg-surface-container-low,
+html.dark .bg-surface-container {
+  background-color: #1e2224 !important;
+}
+
+html.dark .text-on-surface {
+  color: #e8ece9 !important;
+}
+
+html.dark .text-on-surface-variant,
+html.dark .text-secondary,
+html.dark .text-outline {
+  color: #b8c4bc !important;
+}
+
+html.dark .border-slate-100,
+html.dark .border-slate-200,
+html.dark .border-outline-variant\/20,
+html.dark .border-outline-variant\/10,
+html.dark .border-outline-variant\/30 {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+html.high-contrast .text-on-surface-variant,
+html.high-contrast .text-secondary {
+  color: #191c1e !important;
+  font-weight: 600;
+}
+
+html.high-contrast .text-outline {
+  color: #3a3f42 !important;
+}
+
+html.high-contrast .border-outline-variant\/20,
+html.high-contrast .border-outline-variant\/10,
+html.high-contrast .border-outline-variant\/30,
+html.high-contrast .border-slate-50,
+html.high-contrast .border-slate-100,
+html.high-contrast .border-slate-200 {
+  border-color: #191c1e !important;
+  border-width: 2px !important;
+}
+
+html.high-contrast .bg-surface-container-lowest,
+html.high-contrast .bg-white {
+  border: 2px solid #191c1e !important;
+}
+
+html.dark.high-contrast .text-on-surface-variant,
+html.dark.high-contrast .text-secondary {
+  color: #f0f4f1 !important;
+  font-weight: 600;
+}
+
+html.dark.high-contrast .text-outline {
+  color: #d8e0da !important;
+}
+
+html.dark.high-contrast .border-outline-variant\/20,
+html.dark.high-contrast .border-outline-variant\/10,
+html.dark.high-contrast .border-outline-variant\/30,
+html.dark.high-contrast .border-slate-50,
+html.dark.high-contrast .border-slate-100,
+html.dark.high-contrast .border-slate-200 {
+  border-color: #f0f4f1 !important;
+  border-width: 2px !important;
+}
+
+html.dark.high-contrast .bg-surface-container-lowest,
+html.dark.high-contrast .bg-white {
+  border: 2px solid #f0f4f1 !important;
+}
+
+html.high-contrast button,
+html.high-contrast input,
+html.high-contrast textarea {
+  outline-offset: 2px;
+}
+
+html.high-contrast button:focus-visible,
+html.high-contrast input:focus-visible,
+html.high-contrast textarea:focus-visible {
+  outline: 2px solid #006c49;
+}
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -34,3 +140,4 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+

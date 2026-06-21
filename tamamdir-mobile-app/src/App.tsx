@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ServicesProvider } from "./context/ServicesContext";
+import { PreferencesProvider } from "./context/PreferencesContext";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
@@ -19,6 +20,7 @@ import ProfileManagePage from "./pages/ProfileManagePage";
 import ServiceOwnerViewPage from "./pages/ServiceOwnerViewPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import HelpPage from "./pages/HelpPage";
+import FavoritesPage from "./pages/FavoritesPage";
 import SecurityPage from "./pages/SecurityPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -51,6 +53,7 @@ function AppRoutes() {
       <Route path="/account" element={<RequireAuth><AccountPage /></RequireAuth>} />
       <Route path="/account/settings" element={<RequireAuth><AccountSettingsPage /></RequireAuth>} />
       <Route path="/account/security" element={<RequireAuth><SecurityPage /></RequireAuth>} />
+      <Route path="/favorites" element={<RequireAuth><FavoritesPage /></RequireAuth>} />
       <Route path="/help" element={<RequireAuth><HelpPage /></RequireAuth>} />
       <Route path="/personalization" element={<RequireAuth><PersonalizationPage /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -61,11 +64,13 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <ServicesProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </ServicesProvider>
+      <PreferencesProvider>
+        <ServicesProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </ServicesProvider>
+      </PreferencesProvider>
     </AuthProvider>
   );
 }
