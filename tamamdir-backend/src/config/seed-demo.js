@@ -10,9 +10,78 @@ process.chdir(require('path').join(__dirname, '../..'));
  */
 
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
+const fs     = require('fs');
+const path   = require('path');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt          = require('bcryptjs');
 const { initDB, run, get, all } = require('./database');
+
+const SEED_ASSETS_DIR = path.join(__dirname, '../../seed-assets');
+const UPLOADS_DIR     = path.join(__dirname, '../../uploads/services');
+const MANIFEST_PATH   = path.join(SEED_ASSETS_DIR, 'manifest.json');
+const IMAGE_EXTS      = ['.jpg', '.jpeg', '.png', '.webp'];
+
+function loadManifest() {
+  if (!fs.existsSync(MANIFEST_PATH)) return {};
+  try {
+    const raw = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
+    return Object.fromEntries(
+      Object.entries(raw).filter(([k]) => !k.startsWith('_'))
+    );
+  } catch (err) {
+    console.warn('⚠️  Could not read seed-assets/manifest.json:', err.message);
+    return {};
+  }
+}
+
+function resolveSeedAssetPath(slug, manifest) {
+  const entry = manifest[slug];
+  if (typeof entry === 'string' && entry.trim()) {
+    const trimmed = entry.trim();
+    if (/^https?:\/\//i.test(trimmed)) return { type: 'url', value: trimmed };
+    const named = path.join(SEED_ASSETS_DIR, trimmed);
+    if (fs.existsSync(named)) return { type: 'file', value: named };
+    console.warn(`  ⚠  manifest "${slug}" → "${trimmed}" not found in seed-assets/`);
+    return null;
+  }
+  for (const ext of IMAGE_EXTS) {
+    const candidate = path.join(SEED_ASSETS_DIR, `${slug}${ext}`);
+    if (fs.existsSync(candidate)) return { type: 'file', value: candidate };
+  }
+  return null;
+}
+
+async function attachCoverImage(serviceId, slug, manifest, slugCoverCache) {
+  if (slugCoverCache.has(slug)) {
+    const cachedUrl = slugCoverCache.get(slug);
+    await run(
+      `INSERT INTO service_images (id, service_id, image_url, is_cover, sort_order) VALUES (?, ?, ?, 1, 0)`,
+      [uuidv4(), serviceId, cachedUrl]
+    );
+    return true;
+  }
+
+  const resolved = resolveSeedAssetPath(slug, manifest);
+  if (!resolved) return false;
+
+  let imageUrl;
+  if (resolved.type === 'url') {
+    imageUrl = resolved.value;
+  } else {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    const ext = path.extname(resolved.value).toLowerCase();
+    const filename = `${uuidv4()}${ext}`;
+    fs.copyFileSync(resolved.value, path.join(UPLOADS_DIR, filename));
+    imageUrl = `/uploads/services/${filename}`;
+  }
+
+  slugCoverCache.set(slug, imageUrl);
+  await run(
+    `INSERT INTO service_images (id, service_id, image_url, is_cover, sort_order) VALUES (?, ?, ?, 1, 0)`,
+    [uuidv4(), serviceId, imageUrl]
+  );
+  return true;
+}
 
 async function main() {
   await initDB();
@@ -101,6 +170,10 @@ async function main() {
       desc: 'Dog walking and cat sitting in the campus area. Daily photo updates. Trusted and reliable — campus pet owner himself.' },
   ];
 
+  const manifest = loadManifest();
+  const slugCoverCache = new Map();
+  let imagesAttached = 0;
+
   const svcId = {};
   for (const s of svcDefs) {
     const cat = catBySlug[s.slug];
@@ -112,6 +185,13 @@ async function main() {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [id, uid[s.email], cat.id, s.title, s.desc, s.price, s.unit, s.days]
     );
+    if (await attachCoverImage(id, s.slug, manifest, slugCoverCache)) imagesAttached++;
+  }
+
+  if (imagesAttached === 0) {
+    console.log('ℹ️  No cover images — add files to seed-assets/ or edit seed-assets/manifest.json');
+  } else {
+    console.log(`🖼️  Attached cover images for ${slugCoverCache.size} categor${slugCoverCache.size === 1 ? 'y' : 'ies'} (${imagesAttached} services)`);
   }
 
   // ── Completed orders + reviews ─────────────────────────────────────────────
