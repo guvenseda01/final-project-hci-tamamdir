@@ -62,11 +62,15 @@ function AppRoutes() {
 }
 
 function App() {
+  const basename = import.meta.env.BASE_URL === '/'
+    ? undefined
+    : import.meta.env.BASE_URL.replace(/\/$/, '');
+
   return (
     <AuthProvider>
       <PreferencesProvider>
         <ServicesProvider>
-          <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/mobile'}>
+          <BrowserRouter basename={basename}>
             <AppRoutes />
           </BrowserRouter>
         </ServicesProvider>
