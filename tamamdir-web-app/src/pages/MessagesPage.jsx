@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Send, Image, Plus, MoreVertical, Loader2, CheckCircle2, Ban, Flag, AlertCircle } from 'lucide-react'
-import { cn, formatPrice, resolveMediaUrl } from '../lib/utils'
+import { cn, resolveMediaUrl } from '../lib/utils'
 import TamamdirLogo from '../components/TamamdirLogo'
 import api from '../lib/api'
 import { getSocket, joinConversation, leaveConversation, disconnectSocket } from '../lib/socket'
@@ -9,6 +9,8 @@ import LeaveFeedbackModal from '../components/LeaveFeedbackModal'
 import FeedbackThanksPopup from '../components/FeedbackThanksPopup'
 import ReportModal from '../components/ReportModal'
 import { useAuth } from '../context/AuthContext'
+import { usePreferences } from '../context/PreferencesContext'
+import { formatLocalizedPrice } from '../lib/i18n'
 
 function formatMsgTime(dateStr) {
   if (!dateStr) return ''
@@ -74,11 +76,11 @@ function needsFeedbackPrompt(status) {
   return status?.both_confirmed && status?.order_id && !status?.my_review_submitted
 }
 
-function getCancelModalCopy(tamamdirStatus) {
+function getCancelModalCopy(tamamdirStatus, t) {
   if (!tamamdirStatus?.is_customer) {
     return {
-      body: 'Are you sure you want to cancel this service arrangement?',
-      note: 'Providers are not banned for cancelling. The customer may leave a review reflecting their experience.',
+      body: t('messages.cancelBody'),
+      note: t('messages.cancelProviderNote'),
     }
   }
 
@@ -87,18 +89,18 @@ function getCancelModalCopy(tamamdirStatus) {
 
   if (tamamdirStatus.will_be_banned_if_cancel) {
     return {
-      body: 'Are you sure you want to cancel this service arrangement?',
-      note: `Customers can cancel up to ${limit} times (${used}/${limit} used). This is your final cancellation — you will be banned from this service for 1 week.`,
+      body: t('messages.cancelBody'),
+      note: t('messages.cancelFinalBan', { limit, used }),
     }
   }
 
   const leftAfter = Math.max(0, (tamamdirStatus.my_cancels_remaining ?? limit - used) - 1)
   return {
-    body: 'Are you sure you want to cancel this service arrangement?',
-    note: `Customers can cancel up to ${limit} times (${used}/${limit} used). After this cancellation you will have ${leftAfter} cancellation(s) left before a 1-week ban.`,
+    body: t('messages.cancelBody'),
+    note: t('messages.cancelRemaining', { limit, used, left: leftAfter }),
   }
 }
-function formatConvTime(dateStr) {
+function formatConvTime(dateStr, t) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   const now = new Date()
@@ -107,12 +109,13 @@ function formatConvTime(dateStr) {
   }
   const yesterday = new Date(now)
   yesterday.setDate(now.getDate() - 1)
-  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+  if (d.toDateString() === yesterday.toDateString()) return t('common.yesterday')
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 }
 
 export default function MessagesPage() {
   const { user } = useAuth()
+  const { t } = usePreferences()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedConvId = searchParams.get('conv')
   const requestedServiceId = searchParams.get('service')
@@ -579,7 +582,13 @@ export default function MessagesPage() {
     }
   }
 
-  const cancelModalCopy = getCancelModalCopy(tamamdirStatus)
+  const cancelModalCopy = getCancelModalCopy(tamamdirStatus, t)
+
+  const roleFilters = [
+    { id: 'all', labelKey: 'messages.filterAll' },
+    { id: 'provider', labelKey: 'messages.filterProvider' },
+    { id: 'customer', labelKey: 'messages.filterCustomer' },
+  ]
 
   const serviceCover = activeService?.images?.find(i => i.is_cover)?.image_url
     ?? activeService?.images?.[0]?.image_url
@@ -606,7 +615,7 @@ export default function MessagesPage() {
           disabled={unbanSubmitting}
           className="text-sm font-semibold text-green-primary bg-white px-5 py-2.5 rounded-xl hover:bg-green-pale transition-colors disabled:opacity-60 shrink-0 shadow-md"
         >
-          {unbanSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Remove ban'}
+          {unbanSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : t('messages.removeBan')}
         </button>
       )
     }
@@ -616,7 +625,7 @@ export default function MessagesPage() {
     if (tamamdirStatus?.both_confirmed && tamamdirStatus?.my_review_submitted && !tamamdirStatus?.other_review_submitted) {
       return (
         <div className="bg-amber-100 text-amber-700 text-sm font-medium px-5 py-2.5 rounded-xl border border-amber-200 shrink-0 shadow-sm">
-          Waiting for {activeConv?.other_name}&apos;s feedback
+          {t('messages.waitingFeedback', { name: activeConv?.other_name })}
         </div>
       )
     }
@@ -629,14 +638,14 @@ export default function MessagesPage() {
             onClick={() => setShowFeedbackModal(true)}
             className="text-sm font-semibold text-green-primary bg-white px-4 py-2.5 rounded-xl hover:bg-green-pale transition-colors shadow-md"
           >
-            {tamamdirStatus?.my_existing_review ? 'Update feedback' : 'Leave feedback'}
+            {tamamdirStatus?.my_existing_review ? t('messages.updateFeedback') : t('messages.leaveFeedback')}
           </button>
           <button
             onClick={() => setShowCancelConfirm(true)}
             disabled={cancelSubmitting}
             className="text-sm font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-200 px-5 py-2.5 rounded-xl transition-colors disabled:opacity-60"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </div>
       )
@@ -644,7 +653,7 @@ export default function MessagesPage() {
     if (tamamdirStatus?.my_confirmed && !tamamdirStatus?.both_confirmed) {
       return (
         <div className="bg-amber-100 text-amber-700 text-sm font-medium px-5 py-2.5 rounded-xl border border-amber-200 shrink-0 shadow-sm">
-          Waiting for {activeConv?.other_name}&apos;s approval
+          {t('messages.waitingApproval', { name: activeConv?.other_name })}
         </div>
       )
     }
@@ -653,7 +662,7 @@ export default function MessagesPage() {
       <button
         onClick={handleTamamdir}
         disabled={tamamdirSubmitting}
-        title="Confirm this service"
+        title={t('messages.confirmService')}
         className="flex items-center border-2 border-green-primary rounded-lg px-2 py-1 bg-transparent hover:bg-green-pale/40 transition-colors disabled:opacity-60 disabled:pointer-events-none shrink-0"
       >
         {tamamdirSubmitting ? (
@@ -682,15 +691,11 @@ export default function MessagesPage() {
         {/* ── Conversation list ── */}
         <div className="w-80 shrink-0 border-r border-amber-100 flex flex-col bg-amber-50">
           <div className={chatPanelHeaderClass}>
-            <h2 className={cn('text-xl font-bold', coffeeText)}>Chats</h2>
+            <h2 className={cn('text-xl font-bold', coffeeText)}>{t('messages.chats')}</h2>
           </div>
           <div className="px-4 py-3 border-b border-amber-100 space-y-3">
             <div className="flex flex-wrap gap-2">
-              {[
-                { id: 'all', label: 'All' },
-                { id: 'provider', label: 'Me as provider' },
-                { id: 'customer', label: 'Me as customer' },
-              ].map(opt => (
+              {roleFilters.map(opt => (
                 <button
                   key={opt.id}
                   type="button"
@@ -702,7 +707,7 @@ export default function MessagesPage() {
                       : 'bg-white text-gray-600 border-amber-200 hover:border-green-primary hover:text-green-primary'
                   )}
                 >
-                  {opt.label}
+                  {t(opt.labelKey)}
                 </button>
               ))}
             </div>
@@ -713,7 +718,7 @@ export default function MessagesPage() {
               </svg>
               <input
                 type="text"
-                placeholder="Search conversations..."
+                placeholder={t('messages.searchPlaceholder')}
                 className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-full"
               />
             </div>
@@ -721,7 +726,7 @@ export default function MessagesPage() {
 
           <div className="flex-1 overflow-y-auto">
             {convs.length === 0 && (
-              <p className="text-center text-gray-400 text-sm mt-10 px-4">No conversations yet.</p>
+              <p className="text-center text-gray-400 text-sm mt-10 px-4">{t('messages.noConversations')}</p>
             )}
             {convs.map(conv => (
               <button
@@ -752,10 +757,10 @@ export default function MessagesPage() {
                   <div className="flex items-center justify-between gap-2 mb-0.5">
                     <p className="font-semibold text-sm text-coffee truncate">{conv.other_name}</p>
                     <span className="text-xs text-gray-400 shrink-0">
-                      {formatConvTime(conv.last_msg_at)}
+                      {formatConvTime(conv.last_msg_at, t)}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-400 truncate">{conv.last_message || 'No messages yet'}</p>
+                  <p className="text-xs text-gray-400 truncate">{conv.last_message || t('messages.noMessagesYet')}</p>
                 </div>
                 {conv.unread_count > 0 && (
                   <span className="w-5 h-5 bg-green-primary text-white text-xs font-bold rounded-full flex items-center justify-center shrink-0 mt-0.5">
@@ -785,7 +790,7 @@ export default function MessagesPage() {
                     type="button"
                     onClick={() => setShowChatMenu(v => !v)}
                     className="p-2 rounded-lg hover:bg-amber-200/60 text-gray-400"
-                    aria-label="Chat options"
+                    aria-label={t('messages.chatOptions')}
                   >
                     <MoreVertical className="w-5 h-5" />
                   </button>
@@ -798,7 +803,7 @@ export default function MessagesPage() {
                         className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 text-left disabled:opacity-60"
                       >
                         <Ban className="w-4 h-4" />
-                        {isUserBlocked ? 'Unblock user' : 'Block user'}
+                        {isUserBlocked ? t('messages.unblockUser') : t('messages.blockUser')}
                       </button>
                       <button
                         type="button"
@@ -809,7 +814,7 @@ export default function MessagesPage() {
                         className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 text-left"
                       >
                         <Flag className="w-4 h-4" />
-                        Report conversation
+                        {t('messages.reportConversation')}
                       </button>
                     </div>
                   )}
@@ -836,14 +841,15 @@ export default function MessagesPage() {
                       )}
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-coffee truncate leading-tight">
-                          {isServiceProvider ? 'Service offered' : 'Requested service'}
+                          {isServiceProvider ? t('messages.serviceOffered') : t('messages.requestedService')}
                         </p>
                         <p className="text-xs text-gray-500 mt-0.5 truncate">
-                          {activeService?.title ?? tamamdirStatus?.service_title ?? activeConv?.service_title ?? 'Loading…'}
+                          {activeService?.title ?? tamamdirStatus?.service_title ?? activeConv?.service_title ?? t('messages.loading')}
                           {(activeService?.price != null || activeConv?.service_price != null) && (
                             <>
                               {' · '}
-                              {formatPrice(
+                              {formatLocalizedPrice(
+                                t,
                                 activeService?.price ?? activeConv?.service_price,
                                 activeService?.price_unit ?? activeConv?.service_price_unit
                               )}
@@ -851,7 +857,7 @@ export default function MessagesPage() {
                           )}
                           {isServiceInactive && (
                             <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                              · Archived
+                              · {t('common.archived')}
                             </span>
                           )}
                         </p>
@@ -864,7 +870,7 @@ export default function MessagesPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-coffee truncate leading-tight">
-                          Requested service
+                          {t('messages.requestedService')}
                         </p>
                         <p className="text-xs text-gray-500 mt-0.5 truncate">
                           {activeConv.service_title}
@@ -891,13 +897,13 @@ export default function MessagesPage() {
                 <>
                   <div className="text-center">
                     <span className="text-xs text-gray-400 bg-white px-3 py-1 rounded-full border border-amber-200">
-                      TODAY
+                      {t('common.today')}
                     </span>
                   </div>
 
                   {messages.length === 0 && (
                     <p className="text-center text-gray-400 text-sm pt-8">
-                      No messages yet. Say hello!
+                      {t('messages.sayHello')}
                     </p>
                   )}
 
@@ -952,7 +958,7 @@ export default function MessagesPage() {
               <div className="px-6 py-3 bg-red-50 border-t border-red-100 flex items-center justify-center gap-2">
                 <Ban className="w-4 h-4 text-red-500 shrink-0" />
                 <p className="text-sm font-semibold text-red-600 text-center">
-                  You were banned from this service until {formatBanUntil(tamamdirStatus.banned_until)}
+                  {t('messages.bannedUntil', { date: formatBanUntil(tamamdirStatus.banned_until) })}
                 </p>
               </div>
             )}
@@ -961,8 +967,7 @@ export default function MessagesPage() {
                 <div className="flex items-center gap-2 min-w-0">
                   <Ban className="w-4 h-4 text-amber-600 shrink-0" />
                   <p className="text-sm font-semibold text-amber-700">
-                    This customer is banned from this service until{' '}
-                    {formatBanUntil(tamamdirStatus.banned_until)}
+                    {t('messages.customerBannedUntil', { date: formatBanUntil(tamamdirStatus.banned_until) })}
                   </p>
                 </div>
                 {tamamdirStatus.can_unban && (
@@ -971,7 +976,7 @@ export default function MessagesPage() {
                     disabled={unbanSubmitting}
                     className="text-xs font-semibold text-green-primary bg-white border border-green-primary px-3 py-1.5 rounded-lg hover:bg-green-pale shrink-0 disabled:opacity-60"
                   >
-                    {unbanSubmitting ? 'Removing…' : 'Remove ban'}
+                    {unbanSubmitting ? t('messages.removingBan') : t('messages.removeBan')}
                   </button>
                 )}
               </div>
@@ -985,7 +990,7 @@ export default function MessagesPage() {
                 <div className="flex items-center gap-2 min-w-0">
                   <CheckCircle2 className="w-4 h-4 text-green-primary shrink-0" />
                   <p className="text-sm font-semibold text-green-primary">
-                    {activeConv?.other_name} said Tamamdır! Go click Tamamdır to arrange a deal.
+                    {t('messages.otherSaidTamamdir', { name: activeConv?.other_name })}
                   </p>
                 </div>
               </div>
@@ -995,7 +1000,7 @@ export default function MessagesPage() {
                 <div className="flex items-center gap-2 min-w-0">
                   <CheckCircle2 className="w-4 h-4 text-green-primary shrink-0" />
                   <p className="text-sm font-semibold text-green-primary">
-                    Service arranged — please leave your feedback
+                    {t('messages.leaveFeedbackPrompt')}
                   </p>
                 </div>
               </div>
@@ -1005,8 +1010,8 @@ export default function MessagesPage() {
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                 <p className="text-sm font-semibold text-amber-700 text-center">
                   {isServiceProvider
-                    ? 'This listing is archived and hidden from the marketplace. Unarchive it from Service Management to accept new arrangements.'
-                    : 'This service is not active at the moment. Please check back later to see if it\'s available again.'}
+                    ? t('messages.archivedProvider')
+                    : t('messages.archivedCustomer')}
                 </p>
               </div>
             )}
@@ -1036,10 +1041,10 @@ export default function MessagesPage() {
                     type="text"
                     placeholder={
                       tamamdirStatus?.i_am_banned
-                        ? 'You cannot send messages while banned'
+                        ? t('messages.placeholderBanned')
                         : customerMessagingBlocked
-                          ? 'This service is not active — you can\'t send new messages right now'
-                          : 'Type your message...'
+                          ? t('messages.placeholderInactive')
+                          : t('messages.placeholderType')
                     }
                     value={message}
                     onChange={e => setMessage(e.target.value)}
@@ -1068,14 +1073,14 @@ export default function MessagesPage() {
             <div className="flex-1 flex items-center justify-center px-6">
               <div className="text-center max-w-sm">
                 <p className="text-base font-medium text-gray-600 mb-1">
-                  {convs.length === 0 ? 'Chat box is empty' : 'No chat selected'}
+                  {convs.length === 0 ? t('messages.emptyTitle') : t('messages.noChatSelected')}
                 </p>
                 <p className="text-sm text-gray-400">
                   {convs.length === 0
-                    ? 'Start a conversation from a service page to message someone.'
+                    ? t('messages.emptyDesc')
                     : requestedServiceId
-                      ? 'Pick a conversation from the list about this service.'
-                      : 'Select a conversation from the list to start messaging.'}
+                      ? t('messages.pickConversation')
+                      : t('messages.selectConversation')}
                 </p>
               </div>
             </div>
@@ -1085,7 +1090,7 @@ export default function MessagesPage() {
         {showCancelConfirm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-              <h3 className="text-lg font-semibold text-coffee mb-2">Cancel arrangement?</h3>
+              <h3 className="text-lg font-semibold text-coffee mb-2">{t('messages.cancelArrangementTitle')}</h3>
               <p className="text-sm text-gray-600 mb-3">{cancelModalCopy.body}</p>
               <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 mb-6">
                 {cancelModalCopy.note}
@@ -1096,7 +1101,7 @@ export default function MessagesPage() {
                   disabled={cancelSubmitting}
                   className="text-sm font-medium text-gray-500 hover:text-gray-700 px-4 py-2"
                 >
-                  No
+                  {t('common.no')}
                 </button>
                 <button
                   onClick={handleConfirmCancel}
@@ -1104,7 +1109,7 @@ export default function MessagesPage() {
                   className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-60"
                 >
                   {cancelSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  Yes, cancel
+                  {t('messages.yesCancel')}
                 </button>
               </div>
             </div>

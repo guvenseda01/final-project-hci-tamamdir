@@ -1,9 +1,13 @@
 import { Link } from 'react-router-dom'
 import { Star, MapPin } from 'lucide-react'
-import { formatPrice, resolveMediaUrl, formatLocationType } from '../lib/utils'
+import { resolveMediaUrl } from '../lib/utils'
+import { formatLocalizedPrice, tLocation } from '../lib/i18n'
+import { usePreferences } from '../context/PreferencesContext'
 import FavoriteButton from './FavoriteButton'
 
 export default function ServiceCard({ service }) {
+  const { t } = usePreferences()
+
   return (
     <Link to={`/services/${service.id}`} className="block group">
       <div className="bg-amber-100 rounded-xl overflow-hidden border border-amber-200 shadow-sm hover:shadow-md transition-shadow duration-200">
@@ -19,7 +23,7 @@ export default function ServiceCard({ service }) {
           )}
           <div className="absolute top-3 left-3">
             <span className="bg-green-primary text-white text-xs font-semibold px-2.5 py-1 rounded-full">
-              {formatPrice(service.price, service.price_unit)}
+              {formatLocalizedPrice(t, service.price, service.price_unit)}
             </span>
           </div>
           <div className="absolute top-3 right-3">
@@ -39,7 +43,7 @@ export default function ServiceCard({ service }) {
                   </span>
                 </>
               ) : (
-                <span className="text-xs text-gray-400">New</span>
+                <span className="text-xs text-gray-400">{t('serviceCard.new')}</span>
               )}
             </div>
           </div>
@@ -48,7 +52,7 @@ export default function ServiceCard({ service }) {
           {service.location_type && (
             <p className="inline-flex items-center gap-1 text-[11px] text-coffee/70 mb-2">
               <MapPin className="w-3 h-3 shrink-0" />
-              {formatLocationType(service.location_type)}
+              {tLocation(t, service.location_type)}
             </p>
           )}
 
@@ -71,7 +75,7 @@ export default function ServiceCard({ service }) {
                 {service.provider_name ?? ''}
               </span>
             </div>
-            <span className="text-xs text-green-primary font-medium">View Details</span>
+            <span className="text-xs text-green-primary font-medium">{t('serviceCard.viewDetails')}</span>
           </div>
         </div>
       </div>
