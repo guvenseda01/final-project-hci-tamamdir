@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import api from '../lib/api'
+import { disconnectSocket } from '../lib/socket'
 
 const AuthContext = createContext(null)
 
@@ -23,8 +24,8 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     const data = await api.post('/api/auth/login', { email, password })
     localStorage.setItem('token', data.token)
-    setUser(data.user)
-    return data
+    const user = await me()
+    return { ...data, user }
   }
 
   async function register(full_name, email, password) {
@@ -34,8 +35,8 @@ export function AuthProvider({ children }) {
   async function verifyEmail(email, code) {
     const data = await api.post('/api/auth/verify-email', { email, code })
     localStorage.setItem('token', data.token)
-    setUser(data.user)
-    return data
+    const user = await me()
+    return { ...data, user }
   }
 
   async function resendVerification(email) {
@@ -43,6 +44,7 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
+    disconnectSocket()
     localStorage.removeItem('token')
     setUser(null)
   }

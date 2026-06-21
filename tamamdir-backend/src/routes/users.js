@@ -270,7 +270,7 @@ router.patch(
 
       if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
-      updates.push("updated_at = NOW()");
+      updates.push("updated_at = datetime('now')");
       values.push(req.params.id);
 
       await run(
@@ -339,7 +339,7 @@ router.put('/:id/interests', requireAuth, async (req, res, next) => {
     await run('DELETE FROM user_interests WHERE user_id = ?', [req.params.id]);
     for (const cid of category_ids) {
       await run(
-        'INSERT INTO user_interests (user_id, category_id) VALUES (?, ?) ON CONFLICT DO NOTHING',
+        'INSERT OR IGNORE INTO user_interests (user_id, category_id) VALUES (?, ?)',
         [req.params.id, cid]
       );
     }

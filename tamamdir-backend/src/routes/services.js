@@ -270,6 +270,7 @@ router.get('/', optionalAuth, async (req, res, next) => {
     const {
       q,            // free-text search
       category,     // category slug or id
+      interests,    // "1" or "true" — filter to authenticated user's interest categories
       min_price,
       max_price,
       sort = 'newest', // newest | rating | price_asc | price_desc | popular
@@ -289,6 +290,25 @@ router.get('/', optionalAuth, async (req, res, next) => {
     if (category) {
       where.push('(c.slug = ? OR c.id = ?)');
       params.push(category, category);
+    }
+
+    if (interests === '1' || interests === 'true') {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required for interest-based filtering' });
+      }
+      const userInterests = await all(
+        'SELECT category_id FROM user_interests WHERE user_id = ?',
+        [req.user.id]
+      );
+      const categoryIds = userInterests.map((row) => row.category_id);
+      if (categoryIds.length === 0) {
+        return res.json({
+          services: [],
+          pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), pages: 0 },
+        });
+      }
+      where.push(`s.category_id IN (${categoryIds.map(() => '?').join(', ')})`);
+      params.push(...categoryIds);
     }
 
     if (min_price) {
