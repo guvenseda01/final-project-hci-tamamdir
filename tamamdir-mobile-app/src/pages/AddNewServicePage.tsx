@@ -37,7 +37,10 @@ export default function AddNewServicePage() {
       .then((data: any) => {
         const list = Array.isArray(data) ? data : [];
         if (list.length > 0) {
-          setCategories(list.map((c: any) => ({ id: String(c.id), name: c.name })));
+          const mapped = list.map((c: any) => ({ id: String(c.id), name: c.name }));
+          const others = mapped.filter((c: any) => c.name === 'Other');
+          const rest = mapped.filter((c: any) => c.name !== 'Other');
+          setCategories([...rest, ...others]);
         } else {
           setCategories(FALLBACK_CATEGORIES.map((name, i) => ({ id: String(i + 1), name })));
         }

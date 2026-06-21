@@ -330,6 +330,18 @@ async function initDB() {
   `);
 
   await seed();
+
+  const { v4: uuidv4 } = require('uuid');
+  for (const c of [
+    { name: 'Teaching & Tutoring', icon: 'school',     slug: 'teaching-tutoring' },
+    { name: 'Other',               icon: 'more_horiz', slug: 'others'            },
+  ]) {
+    await pool.query(
+      'INSERT INTO categories (id,name,icon,slug) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING',
+      [uuidv4(), c.name, c.icon, c.slug]
+    );
+  }
+
   console.log(`📦  PostgreSQL connected: ${process.env.DATABASE_URL}`);
 }
 

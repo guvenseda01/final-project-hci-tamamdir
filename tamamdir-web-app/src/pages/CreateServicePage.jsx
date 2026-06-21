@@ -43,7 +43,12 @@ export default function CreateServicePage() {
 
   useEffect(() => {
     api.get('/api/categories')
-      .then(data => setCategories(data))
+      .then(data => {
+        const list = Array.isArray(data) ? data : [];
+        const others = list.filter(c => c.name === 'Other');
+        const rest = list.filter(c => c.name !== 'Other');
+        setCategories([...rest, ...others]);
+      })
       .catch(() => setError('Could not load categories.'))
       .finally(() => setLoadingCats(false))
   }, [])
