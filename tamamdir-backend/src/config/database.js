@@ -266,6 +266,27 @@ async function initDB() {
   await pool.query(
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_review_count INTEGER DEFAULT 0'
   );
+  await pool.query(
+    "ALTER TABLE services ADD COLUMN IF NOT EXISTS location_type TEXT DEFAULT 'on_campus'"
+  );
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INTEGER DEFAULT 0'
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS reports (
+      id          TEXT PRIMARY KEY,
+      reporter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      target_type TEXT NOT NULL,
+      target_id   TEXT NOT NULL,
+      reason      TEXT NOT NULL,
+      details     TEXT,
+      status      TEXT NOT NULL DEFAULT 'pending',
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, created_at DESC)'
+  );
 
   // Allow multiple conversations per pair (one per service)
   await pool.query(`
