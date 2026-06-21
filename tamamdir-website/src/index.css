@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-white text-slate-800 antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary-light {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-white text-brand-900 font-bold text-sm shadow-soft hover:bg-brand-50 hover:scale-[1.02] transition-all;
+  }
+  .btn-outline-light {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl border-2 border-white/30 text-white font-bold text-sm hover:bg-white/10 transition-all;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-emerald-300 to-brand-400 bg-clip-text text-transparent;
+  }
+}

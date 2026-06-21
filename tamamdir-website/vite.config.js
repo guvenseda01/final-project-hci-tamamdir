@@ -6,15 +6,15 @@ export default defineConfig(({ mode }) => {
   const apiTarget = env.VITE_API_PROXY_TARGET ?? 'http://localhost:3000'
 
   return {
-    base: '/mobile/',
     plugins: [react()],
     server: {
-      port: 5174,
+      port: 5175,
       strictPort: true,
       host: true,
       proxy: {
-        '/api': apiTarget,
-        '/uploads': apiTarget,
+        '/mobile': { target: 'http://localhost:5174', changeOrigin: true },
+        '/api': { target: apiTarget, changeOrigin: true },
+        '/uploads': { target: apiTarget, changeOrigin: true },
       },
     },
   }

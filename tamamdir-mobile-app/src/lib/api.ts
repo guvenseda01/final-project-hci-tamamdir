@@ -1,5 +1,5 @@
 // In dev, use same-origin + Vite proxy (/api → backend). Avoid localhost:3000 on phone/LAN testing.
-const BASE = (import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? '' : 'http://localhost:3000')).replace(/\/$/, '')
+const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
 async function request(path: string, { body, ...options }: Omit<RequestInit, 'body'> & { body?: unknown } = {}) {
   const token = localStorage.getItem('token')
