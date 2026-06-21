@@ -20,20 +20,16 @@ const app = express();
 // CORS Middleware (MUST be first, before auth and other middleware)
 // ──────────────────────────────────────────────────────────────────────────────
 const corsOrigin = process.env.CORS_ORIGIN || process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:5173';
-app.use(cors({
+const corsOptions = {
   origin: corsOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+};
 
-// Handle preflight requests explicitly (Express should auto-handle, but this ensures it)
-app.options('*', cors({
-  origin: corsOrigin,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use(cors(corsOptions));
+// Handle preflight requests for all routes (use regex pattern instead of *)
+app.options(/.*/, cors(corsOptions));
 
 // Body parsing middleware (after CORS)
 app.use(express.json());
