@@ -52,7 +52,9 @@ export default function MessagesPage() {
           id: c.id,
           participantId: c.other_id ?? "",
           participantName: c.other_name ?? "",
-          participantAvatar: c.other_avatar ?? "",
+          participantAvatar: c.other_avatar
+            ? (c.other_avatar.startsWith('http') ? c.other_avatar : `${import.meta.env.VITE_API_URL ?? 'http://localhost:3000'}${c.other_avatar}`)
+            : `https://i.pravatar.cc/150?u=${c.other_id}`,
           lastMessage: c.last_message ?? "",
           lastTime: (c.last_msg_at ?? c.last_message_at)
             ? new Date(c.last_msg_at ?? c.last_message_at).toLocaleTimeString(preferences.language === "tr" ? "tr-TR" : preferences.language === "de" ? "de-DE" : preferences.language === "es" ? "es-ES" : "en-US", { hour: "2-digit", minute: "2-digit" })
