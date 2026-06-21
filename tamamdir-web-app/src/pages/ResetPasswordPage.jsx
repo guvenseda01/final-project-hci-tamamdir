@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Lock, Loader2, CheckCircle2, Eye, EyeOff } from 'lucide-react'
 import api from '../lib/api'
+import { usePreferences } from '../context/PreferencesContext'
 import TamamdirLogo from '../components/TamamdirLogo'
 
 export default function ResetPasswordPage() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { t } = usePreferences()
 
   const email = location.state?.email ?? ''
   const expiresInMinutes = location.state?.expiresInMinutes ?? 15
@@ -27,15 +29,15 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (code.length !== 6) {
-      setError('Please enter the 6-digit reset code.')
+      setError(t('reset.codeRequired'))
       return
     }
     if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters.')
+      setError(t('register.passwordMin'))
       return
     }
     if (newPassword !== confirmPassword) {
-      setError('Passwords do not match.')
+      setError(t('register.passwordMismatch'))
       return
     }
 
@@ -48,11 +50,11 @@ export default function ResetPasswordPage() {
         code,
         new_password: newPassword,
       })
-      setSuccess('Password reset successfully. Redirecting to login…')
+      setSuccess(t('reset.success'))
       setTimeout(() => navigate('/login', { replace: true }), 1500)
     } catch (err) {
       const apiErrors = err.data?.errors
-      setError(apiErrors ? apiErrors[0].msg : (err.message || 'Password reset failed.'))
+      setError(apiErrors ? apiErrors[0].msg : (err.message || t('reset.failed')))
     } finally {
       setSubmitting(false)
     }
@@ -64,9 +66,9 @@ export default function ResetPasswordPage() {
     setResending(true)
     try {
       await api.post('/api/auth/forgot-password', { email })
-      setSuccess('A new reset code has been sent to your email.')
+      setSuccess(t('reset.resendSuccess'))
     } catch (err) {
-      setError(err.message || 'Could not resend code.')
+      setError(err.message || t('reset.resendFailed'))
     } finally {
       setResending(false)
     }
@@ -81,10 +83,10 @@ export default function ResetPasswordPage() {
           <div className="relative z-10">
             <TamamdirLogo className="h-[66px] mb-16" />
             <h2 className="text-4xl font-bold text-coffee leading-tight mb-4">
-              Choose a new password
+              {t('reset.heroTitle')}
             </h2>
             <p className="text-gray-600 text-lg">
-              Enter the code from your email and set a strong new password for your account.
+              {t('reset.heroDesc')}
             </p>
           </div>
         </div>
@@ -99,25 +101,25 @@ export default function ResetPasswordPage() {
             </div>
 
             <div className="mb-8">
-              <h1 className="text-3xl font-bold text-white mb-2">Reset your password</h1>
+              <h1 className="text-3xl font-bold text-white mb-2">{t('reset.title')}</h1>
               <p className="text-green-light">
-                Enter the code sent to{' '}
+                {t('reset.subtitle')}{' '}
                 <span className="font-medium text-white">{email}</span>.
-                The code expires in {expiresInMinutes} minutes.
+                {' '}{t('reset.expiresIn', { minutes: expiresInMinutes })}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-white mb-1.5">
-                  Reset Code
+                  {t('reset.codeLabel')}
                 </label>
                 <input
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
                   maxLength={6}
-                  placeholder="000000"
+                  placeholder={t('reset.codePlaceholder')}
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   className="input-field text-center text-2xl tracking-[0.4em] font-mono bg-amber-50 border-amber-100"
@@ -127,7 +129,7 @@ export default function ResetPasswordPage() {
 
               <div>
                 <label className="block text-sm font-medium text-white mb-1.5">
-                  New Password
+                  {t('common.newPassword')}
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -151,7 +153,7 @@ export default function ResetPasswordPage() {
 
               <div>
                 <label className="block text-sm font-medium text-white mb-1.5">
-                  Confirm Password
+                  {t('common.confirmPassword')}
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -182,12 +184,12 @@ export default function ResetPasswordPage() {
                 {submitting ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Resetting…
+                    {t('reset.resetting')}
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-5 h-5" />
-                    Reset Password
+                    {t('reset.submit')}
                   </>
                 )}
               </button>
@@ -195,20 +197,20 @@ export default function ResetPasswordPage() {
 
             <div className="mt-6 text-center space-y-3">
               <p className="text-sm text-green-light">
-                Didn&apos;t receive the code?{' '}
+                {t('reset.noCode')}{' '}
                 <button
                   type="button"
                   onClick={handleResend}
                   disabled={resending}
                   className="text-white font-semibold hover:underline disabled:opacity-60"
                 >
-                  {resending ? 'Sending…' : 'Resend code'}
+                  {resending ? t('common.sending') : t('common.resendCode')}
                 </button>
               </p>
               <p className="text-sm text-green-light">
-                Wrong email?{' '}
+                {t('reset.wrongEmail')}{' '}
                 <Link to="/forgot-password" className="text-white font-semibold hover:underline">
-                  Try again
+                  {t('common.tryAgain')}
                 </Link>
               </p>
             </div>

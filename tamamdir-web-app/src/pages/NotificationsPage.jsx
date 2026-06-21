@@ -4,19 +4,21 @@ import { Bell, Loader2, MessageSquare, ShoppingBag, Star } from 'lucide-react'
 import api from '../lib/api'
 import { getSocket } from '../lib/socket'
 import { useAuth } from '../context/AuthContext'
+import { usePreferences } from '../context/PreferencesContext'
+import { formatNotificationText } from '../lib/i18n'
 import { cn } from '../lib/utils'
 
-function formatNotifTime(dateStr) {
+function formatNotifTime(dateStr, t, lang) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   const now = new Date()
   const diffMs = now - d
   const diffMins = Math.floor(diffMs / 60000)
-  if (diffMins < 1) return 'Just now'
-  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffMins < 1) return t('notifications.justNow')
+  if (diffMins < 60) return t('notifications.minutesAgo', { count: diffMins })
   const diffHours = Math.floor(diffMins / 60)
-  if (diffHours < 24) return `${diffHours}h ago`
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+  if (diffHours < 24) return t('notifications.hoursAgo', { count: diffHours })
+  return d.toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-GB', { day: '2-digit', month: 'short' })
 }
 
 function NotifIcon({ type }) {
@@ -41,6 +43,7 @@ function getNotifLink(notification) {
 
 export default function NotificationsPage() {
   const { user } = useAuth()
+  const { t, language } = usePreferences()
   const navigate = useNavigate()
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
@@ -93,8 +96,8 @@ export default function NotificationsPage() {
   return (
     <div className="min-h-screen bg-amber-50">
       <main className="max-w-2xl mx-auto px-4 sm:px-6 py-10">
-        <h1 className="text-2xl font-bold text-coffee mb-1">Notifications</h1>
-        <p className="text-gray-500 text-sm mb-8">Stay updated on orders, messages, and account activity.</p>
+        <h1 className="text-2xl font-bold text-coffee mb-1">{t('notifications.title')}</h1>
+        <p className="text-gray-500 text-sm mb-8">{t('notifications.subtitle')}</p>
 
         {loading ? (
           <div className="flex justify-center py-20">
@@ -105,9 +108,9 @@ export default function NotificationsPage() {
             <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Bell className="w-7 h-7 text-gray-400" />
             </div>
-            <p className="text-sm font-medium text-gray-700 mb-1">No notifications yet</p>
+            <p className="text-sm font-medium text-gray-700 mb-1">{t('notifications.emptyTitle')}</p>
             <p className="text-xs text-gray-400">
-              When you receive order updates or other alerts, they will appear here.
+              {t('notifications.emptyDesc')}
             </p>
           </div>
         ) : (
@@ -115,6 +118,7 @@ export default function NotificationsPage() {
             {notifications.map(notification => {
               const link = getNotifLink(notification)
               const unread = !notification.is_read
+              const { title, body } = formatNotificationText(t, notification, language)
 
               return (
                 <button
@@ -132,18 +136,18 @@ export default function NotificationsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <p className={cn('text-sm font-semibold text-coffee', unread && 'text-green-dark')}>
-                        {notification.title}
+                        {title}
                       </p>
                       <span className="text-xs text-gray-400 shrink-0">
-                        {formatNotifTime(notification.created_at)}
+                        {formatNotifTime(notification.created_at, t, language)}
                       </span>
                     </div>
-                    {notification.body && (
-                      <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{notification.body}</p>
+                    {body && (
+                      <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{body}</p>
                     )}
                     {link && (
                       <span className="text-xs text-green-primary font-medium mt-1 inline-block">
-                        View →
+                        {t('common.view')}
                       </span>
                     )}
                   </div>

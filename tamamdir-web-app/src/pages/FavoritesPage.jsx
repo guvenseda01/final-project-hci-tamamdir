@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Heart, AlertCircle, Loader2 } from 'lucide-react'
 import ServiceCard from '../components/ServiceCard'
 import api from '../lib/api'
+import { usePreferences } from '../context/PreferencesContext'
 
 function ServiceCardSkeleton() {
   return (
@@ -16,6 +17,7 @@ function ServiceCardSkeleton() {
 }
 
 export default function FavoritesPage() {
+  const { t } = usePreferences()
   const [services, setServices] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -26,17 +28,16 @@ export default function FavoritesPage() {
     setError('')
     api.get('/api/favorites/services')
       .then(data => { if (!cancelled) setServices(data) })
-      .catch(err => { if (!cancelled) setError(err.message || 'Failed to load favorites.') })
+      .catch(err => { if (!cancelled) setError(err.message || t('favorites.loadFailed')) })
       .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [])
+  }, [t])
 
   return (
     <div className="min-h-screen bg-amber-50">
       <main className="w-full px-4 sm:px-6 lg:px-8 pt-4 pb-10">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-coffee mb-1">Favorites</h1>
-          <p className="text-gray-500 text-sm">Services you saved for later.</p>
+          <h1 className="text-3xl font-bold text-coffee mb-1">{t('favorites.title')}</h1>
+          <p className="text-gray-500 text-sm">{t('favorites.subtitle')}</p>
         </div>
 
         {error && (
@@ -57,8 +58,8 @@ export default function FavoritesPage() {
         ) : (
           <div className="text-center py-20">
             <Heart className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-400 text-lg font-medium">No favorites yet</p>
-            <p className="text-gray-300 text-sm mt-1">Tap the heart on a service to save it here.</p>
+            <p className="text-gray-400 text-lg font-medium">{t('favorites.emptyTitle')}</p>
+            <p className="text-gray-300 text-sm mt-1">{t('favorites.emptyDesc')}</p>
           </div>
         )}
       </main>
