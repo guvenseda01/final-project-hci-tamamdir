@@ -58,7 +58,7 @@ export default function VerifyEmailPage() {
   if (!email) return null
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-amber-50">
       <div className="flex flex-1">
         <div className="hidden lg:flex lg:w-1/2 bg-green-primary flex-col justify-between p-12 relative overflow-hidden">
           <div className="relative z-10">
@@ -82,19 +82,14 @@ export default function VerifyEmailPage() {
 
         <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 lg:px-20 py-12">
           <div className="w-full max-w-md mx-auto">
-            <div className="flex lg:hidden items-center gap-2 mb-10">
-              <CheckCircle2 className="w-6 h-6 text-green-primary" />
-              <span className="text-xl font-bold text-green-primary">Tamamdır!</span>
-            </div>
-
             <div className="mb-8">
               <div className="w-12 h-12 bg-green-pale rounded-full flex items-center justify-center mb-4">
                 <Mail className="w-6 h-6 text-green-primary" />
               </div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Check your email</h1>
+              <h1 className="text-3xl font-bold text-coffee mb-2">Check your email</h1>
               <p className="text-gray-500">
                 We sent a verification code to{' '}
-                <span className="font-medium text-gray-700">{email}</span>.
+                <span className="font-medium text-green-primary">{email}</span>.
                 The code expires in {expiresInMinutes} minutes.
               </p>
             </div>

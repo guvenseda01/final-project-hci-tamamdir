@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, AlertCircle, Loader2, Plus, ImagePlus, X } from 'lucide-react'
-import Navbar from '../components/Navbar'
 import api from '../lib/api'
+import { LOCATION_OPTIONS } from '../lib/utils'
 
 const MAX_IMAGES = 10
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
@@ -30,6 +30,7 @@ export default function CreateServicePage() {
   const [price, setPrice] = useState('')
   const [priceUnit, setPriceUnit] = useState('session')
   const [deliveryDays, setDeliveryDays] = useState('1')
+  const [locationType, setLocationType] = useState('on_campus')
   const [images, setImages] = useState([])
   const imagesRef = useRef(images)
   imagesRef.current = images
@@ -120,6 +121,7 @@ export default function CreateServicePage() {
         price: parsedPrice,
         price_unit: priceUnit,
         delivery_days: parsedDays >= 1 ? parsedDays : 1,
+        location_type: locationType,
       })
 
       let imageUploadFailed = false
@@ -146,9 +148,7 @@ export default function CreateServicePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
+    <div className="min-h-screen bg-amber-50">
       <main className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
         <Link
           to="/profile"
@@ -160,7 +160,7 @@ export default function CreateServicePage() {
         </Link>
 
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-1">Add New Service</h1>
+          <h1 className="text-3xl font-bold text-coffee mb-1">Add New Service</h1>
           <p className="text-gray-500 text-sm">
             Create a listing so other students can find and book your service.
           </p>
@@ -307,6 +307,23 @@ export default function CreateServicePage() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="locationType" className="block text-sm font-medium text-gray-700 mb-1.5">
+              Meeting location
+            </label>
+            <select
+              id="locationType"
+              value={locationType}
+              onChange={e => setLocationType(e.target.value)}
+              className="input-field"
+            >
+              {LOCATION_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1.5">Where will this service take place?</p>
           </div>
 
           <div>

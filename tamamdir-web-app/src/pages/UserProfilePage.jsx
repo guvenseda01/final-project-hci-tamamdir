@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, Navigate, useNavigate } from 'react-router-dom'
-import { CheckCircle2, Star, ArrowLeft, AlertCircle, Loader2 } from 'lucide-react'
-import Navbar from '../components/Navbar'
+import { CheckCircle2, Star, ArrowLeft, AlertCircle, Loader2, Flag, Ban } from 'lucide-react'
 import ServiceCard from '../components/ServiceCard'
+import ReportModal from '../components/ReportModal'
 import api from '../lib/api'
+import { resolveMediaUrl } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
 
 function formatReviewDate(dateStr) {
@@ -45,6 +46,34 @@ export default function UserProfilePage() {
   const [customerReviews, setCustomerReviews] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [isBlocked, setIsBlocked] = useState(false)
+  const [blockBusy, setBlockBusy] = useState(false)
+
+  useEffect(() => {
+    if (!id || currentUser?.id === id) return
+    api.get(`/api/users/${id}/block-status`)
+      .then(data => setIsBlocked(!!data.blocked))
+      .catch(() => setIsBlocked(false))
+  }, [id, currentUser?.id])
+
+  const toggleBlock = async () => {
+    if (!id || blockBusy) return
+    setBlockBusy(true)
+    try {
+      if (isBlocked) {
+        await api.del(`/api/users/${id}/block`)
+        setIsBlocked(false)
+      } else {
+        await api.post(`/api/users/${id}/block`)
+        setIsBlocked(true)
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to update block status.')
+    } finally {
+      setBlockBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (currentUser?.id === id) return
@@ -87,9 +116,7 @@ export default function UserProfilePage() {
   const providerReviewCount = profile?.review_count ?? 0
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
+    <div className="min-h-screen bg-amber-50">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         <button
           onClick={() => navigate(-1)}
@@ -118,7 +145,7 @@ export default function UserProfilePage() {
                 <div className="relative shrink-0">
                   {profile.avatar_url ? (
                     <img
-                      src={profile.avatar_url}
+                      src={resolveMediaUrl(profile.avatar_url)}
                       alt={profile.full_name}
                       className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-sm"
                     />
@@ -137,7 +164,30 @@ export default function UserProfilePage() {
                 </div>
 
                 <div className="flex-1 text-center sm:text-left">
-                  <h1 className="text-2xl font-bold text-gray-900 mb-1">{profile.full_name}</h1>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-1">
+                    <h1 className="text-2xl font-bold text-coffee">{profile.full_name}</h1>
+                    <div className="flex items-center justify-center sm:justify-end gap-3 shrink-0">
+                      {currentUser?.id !== id && (
+                        <button
+                          type="button"
+                          disabled={blockBusy}
+                          onClick={toggleBlock}
+                          className="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-gray-500 hover:text-red-600 disabled:opacity-60"
+                        >
+                          <Ban className="w-4 h-4" />
+                          {isBlocked ? 'Unblock' : 'Block'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowReportModal(true)}
+                        className="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-gray-500 hover:text-red-600 shrink-0"
+                      >
+                        <Flag className="w-4 h-4" />
+                        Report
+                      </button>
+                    </div>
+                  </div>
                   {profile.department && (
                     <p className="text-gray-500 text-sm mb-2">{profile.department}</p>
                   )}
@@ -156,7 +206,7 @@ export default function UserProfilePage() {
                       <div className="flex items-center gap-1.5 text-sm text-gray-600">
                         <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
                         <span>
-                          <span className="font-semibold text-gray-900">
+                          <span className="font-semibold text-gray-600">
                             {Number(profile.customer_rating).toFixed(1)}
                           </span>
                           {' '}({customerReviewCount} review{customerReviewCount !== 1 ? 's' : ''} from providers)
@@ -167,7 +217,7 @@ export default function UserProfilePage() {
                       <div className="flex items-center gap-1.5 text-sm text-gray-600">
                         <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
                         <span>
-                          <span className="font-semibold text-gray-900">
+                          <span className="font-semibold text-gray-600">
                             {Number(profile.rating).toFixed(1)}
                           </span>
                           {' '}({providerReviewCount} review{providerReviewCount !== 1 ? 's' : ''} on services)
@@ -188,7 +238,7 @@ export default function UserProfilePage() {
 
             {customerReviews.length > 0 && (
               <section className="mb-10">
-                <h2 className="text-xl font-bold text-gray-900 mb-1">
+                <h2 className="text-xl font-bold text-coffee mb-1">
                   Reviews from providers
                   <span className="text-gray-400 font-normal text-base ml-2">
                     ({customerReviews.length})
@@ -202,7 +252,7 @@ export default function UserProfilePage() {
                     <div key={review.id} className="p-5 flex gap-4">
                       {review.reviewer_avatar ? (
                         <img
-                          src={review.reviewer_avatar}
+                          src={resolveMediaUrl(review.reviewer_avatar)}
                           alt={review.reviewer_name}
                           className="w-10 h-10 rounded-full object-cover shrink-0 border border-gray-100"
                         />
@@ -215,7 +265,7 @@ export default function UserProfilePage() {
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
-                          <span className="font-semibold text-sm text-gray-900">
+                          <span className="font-semibold text-sm text-coffee">
                             {review.reviewer_name}
                           </span>
                           <div className="flex items-center gap-0.5">
@@ -241,7 +291,7 @@ export default function UserProfilePage() {
             )}
 
             <section>
-              <h2 className="text-xl font-bold text-gray-900 mb-6">
+              <h2 className="text-xl font-bold text-coffee mb-6">
                 Services by {profile.full_name?.split(' ')[0]}
               </h2>
               {services.length === 0 ? (
@@ -259,6 +309,14 @@ export default function UserProfilePage() {
           </>
         )}
       </main>
+
+      <ReportModal
+        open={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        targetType="user"
+        targetId={profile?.id}
+        targetLabel={profile?.full_name}
+      />
     </div>
   )
 }

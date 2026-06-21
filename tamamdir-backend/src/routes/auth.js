@@ -152,7 +152,7 @@ const { v4: uuidv4 } = require('uuid');
 const { run, get } = require('../config/database');
 const { signToken, requireAuth } = require('../middleware/auth');
 const { sendVerificationEmail } = require('../services/email');
-const { isIyteStudentEmail, sanitizeUser } = require('../utils/user');
+const { isIyteStudentEmail, isAdminEmail, sanitizeUser } = require('../utils/user');
 const {
   generateCode,
   hashCode,
@@ -241,11 +241,12 @@ router.post(
       const id           = uuidv4();
       const passwordHash = await bcrypt.hash(password, 12);
       const isVerifiedStudent = isIyteStudentEmail(email) ? 1 : 0;
+      const isAdmin = isAdminEmail(email) ? 1 : 0;
 
       await run(
-        `INSERT INTO users (id, full_name, email, password_hash, is_verified, is_verified_student)
-         VALUES (?, ?, ?, ?, 0, ?)`,
-        [id, full_name, email, passwordHash, isVerifiedStudent]
+        `INSERT INTO users (id, full_name, email, password_hash, is_verified, is_verified_student, is_admin)
+         VALUES (?, ?, ?, ?, 0, ?, ?)`,
+        [id, full_name, email, passwordHash, isVerifiedStudent, isAdmin]
       );
 
       const user = await get('SELECT * FROM users WHERE id = ?', [id]);

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search, SlidersHorizontal, AlertCircle } from 'lucide-react'
-import Navbar from '../components/Navbar'
+import { AlertCircle } from 'lucide-react'
 import ServiceCard from '../components/ServiceCard'
 import api from '../lib/api'
+import { cn, LOCATION_OPTIONS } from '../lib/utils'
 
 const SORT_MAP = {
   rating:     'rating',
@@ -13,9 +13,18 @@ const SORT_MAP = {
   popular:    'popular',
 }
 
+function filterPillClass(active) {
+  return cn(
+    'text-sm font-semibold px-4 py-2 rounded-full transition-colors',
+    active
+      ? 'bg-green-pale text-green-primary ring-2 ring-green-primary'
+      : 'bg-green-pale text-green-primary hover:bg-green-badge'
+  )
+}
+
 function ServiceCardSkeleton() {
   return (
-    <div className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm animate-pulse">
+    <div className="bg-amber-100 rounded-xl overflow-hidden border border-amber-200 shadow-sm animate-pulse">
       <div className="h-44 bg-gray-200" />
       <div className="p-4 space-y-2">
         <div className="h-4 bg-gray-200 rounded w-3/4" />
@@ -27,12 +36,14 @@ function ServiceCardSkeleton() {
 }
 
 export default function ServicesPage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const filterByInterests = searchParams.get('interests') === '1'
+  const searchQuery = searchParams.get('q')?.trim() ?? ''
+  const activeLocation = searchParams.get('location_type') ?? ''
+  const minPrice = searchParams.get('min_price') ?? ''
+  const maxPrice = searchParams.get('max_price') ?? ''
 
-  const [search, setSearch] = useState('')
-  const [activeCategory, setActiveCategory] = useState('')   // '' = All (backend slug)
-  const [sortBy, setSortBy] = useState('rating')
+  const [activeCategory, setActiveCategory] = useState('')
 
   const [categories, setCategories] = useState([])
   const [services, setServices] = useState([])
@@ -44,18 +55,22 @@ export default function ServicesPage() {
     api.get('/api/categories').then(data => setCategories(data)).catch(() => {})
   }, [])
 
-  // Fetch services — debounce search, instant for category/sort
+  // Fetch services — instant for category/sort
   useEffect(() => {
     let cancelled = false
 
     const run = async () => {
       setLoading(true)
+      setServices([])
       setError('')
       try {
-        const params = new URLSearchParams({ sort: SORT_MAP[sortBy], limit: '20' })
-        if (search.trim()) params.set('q', search.trim())
+        const params = new URLSearchParams({ sort: SORT_MAP.rating, limit: '20' })
         if (activeCategory) params.set('category', activeCategory)
+        if (activeLocation) params.set('location_type', activeLocation)
+        if (searchQuery) params.set('q', searchQuery)
         if (filterByInterests) params.set('interests', '1')
+        if (minPrice) params.set('min_price', minPrice)
+        if (maxPrice) params.set('max_price', maxPrice)
 
         const data = await api.get(`/api/services?${params}`)
         if (!cancelled) setServices(data.services)
@@ -66,82 +81,128 @@ export default function ServicesPage() {
       }
     }
 
-    const delay = search ? 400 : 0
-    const id = setTimeout(run, delay)
-    return () => { cancelled = true; clearTimeout(id) }
-  }, [search, activeCategory, sortBy, filterByInterests])
+    run()
+    return () => { cancelled = true }
+  }, [activeCategory, activeLocation, filterByInterests, searchQuery, minPrice, maxPrice])
+
+  const setLocationFilter = (value) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (value) next.set('location_type', value)
+      else next.delete('location_type')
+      return next
+    }, { replace: true })
+  }
+
+  const setPriceFilter = (key, value) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      const trimmed = value.trim()
+      if (trimmed) next.set(key, trimmed)
+      else next.delete(key)
+      return next
+    }, { replace: true })
+  }
 
   return (
-    <div className="min-h-screen bg-white">
-      <Navbar />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-1">Marketplace</h1>
-          <p className="text-gray-500">
-            {filterByInterests
-              ? 'Services matching your interests.'
-              : 'Find the perfect campus service from your peers.'}
+    <div className="min-h-screen bg-amber-50">
+      <main className="w-full px-4 sm:px-6 lg:px-8 pt-4 pb-10">
+        <div className="mb-4 w-full">
+          <h1 className="text-3xl font-bold text-coffee mb-1">Marketplace</h1>
+          <p className="text-gray-500 text-sm">
+            {searchQuery
+              ? `Results for “${searchQuery}”.`
+              : filterByInterests
+                ? 'Services matching your interests.'
+                : 'Find the perfect campus service from your peers.'}
           </p>
         </div>
 
-        {/* Search + sort */}
-        <div className="flex flex-wrap gap-3 mb-8">
-          <div className="flex-1 min-w-64 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
-            <Search className="w-5 h-5 text-gray-400 shrink-0" />
-            <input
-              type="text"
-              placeholder="Search services..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none flex-1"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
-            <SlidersHorizontal className="w-4 h-4 text-gray-400" />
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value)}
-              className="bg-transparent text-sm text-gray-700 outline-none cursor-pointer"
+        {/* Location pills */}
+        <div className="flex gap-2 flex-wrap mb-3">
+          <button
+            type="button"
+            onClick={() => setLocationFilter('')}
+            className={filterPillClass(activeLocation === '')}
+          >
+            All locations
+          </button>
+          {LOCATION_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setLocationFilter(opt.value)}
+              className={filterPillClass(activeLocation === opt.value)}
             >
-              <option value="rating">Top Rated</option>
-              <option value="newest">Newest</option>
-              <option value="popular">Most Popular</option>
-              <option value="price_low">Price: Low to High</option>
-              <option value="price_high">Price: High to Low</option>
-            </select>
-          </div>
+              {opt.label}
+            </button>
+          ))}
         </div>
 
         {/* Category pills */}
         {categories.length > 0 && (
-          <div className="flex gap-2 flex-wrap mb-8">
+          <div className="flex gap-2 flex-wrap mb-6">
             <button
+              type="button"
               onClick={() => setActiveCategory('')}
-              className={`text-sm font-medium px-4 py-2 rounded-full transition-colors ${
-                activeCategory === ''
-                  ? 'bg-green-primary text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              className={filterPillClass(activeCategory === '')}
             >
               All
             </button>
-            {categories.slice(0, 8).map(cat => (
+            {categories.map(cat => (
               <button
                 key={cat.id}
+                type="button"
                 onClick={() => setActiveCategory(cat.slug)}
-                className={`text-sm font-medium px-4 py-2 rounded-full transition-colors ${
-                  activeCategory === cat.slug
-                    ? 'bg-green-primary text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                className={filterPillClass(activeCategory === cat.slug)}
               >
                 {cat.name}
               </button>
             ))}
           </div>
         )}
+
+        {/* Price range */}
+        <div className="flex flex-wrap items-end gap-3 mb-6">
+          <div>
+            <label htmlFor="min-price" className="block text-xs font-medium text-gray-500 mb-1">Min price (₺)</label>
+            <input
+              id="min-price"
+              type="number"
+              min="0"
+              placeholder="0"
+              value={minPrice}
+              onChange={e => setPriceFilter('min_price', e.target.value)}
+              className="w-28 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-coffee outline-none focus:border-green-primary focus:ring-1 focus:ring-green-primary"
+            />
+          </div>
+          <div>
+            <label htmlFor="max-price" className="block text-xs font-medium text-gray-500 mb-1">Max price (₺)</label>
+            <input
+              id="max-price"
+              type="number"
+              min="0"
+              placeholder="Any"
+              value={maxPrice}
+              onChange={e => setPriceFilter('max_price', e.target.value)}
+              className="w-28 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-coffee outline-none focus:border-green-primary focus:ring-1 focus:ring-green-primary"
+            />
+          </div>
+          {(minPrice || maxPrice) && (
+            <button
+              type="button"
+              onClick={() => setSearchParams(prev => {
+                const next = new URLSearchParams(prev)
+                next.delete('min_price')
+                next.delete('max_price')
+                return next
+              }, { replace: true })}
+              className="text-sm font-medium text-green-primary hover:underline pb-2"
+            >
+              Clear price
+            </button>
+          )}
+        </div>
 
         {/* Error */}
         {error && (
@@ -153,17 +214,25 @@ export default function ServicesPage() {
 
         {/* Results */}
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {Array.from({ length: 8 }).map((_, i) => <ServiceCardSkeleton key={i} />)}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-4 gap-y-8 w-full">
+            {Array.from({ length: 10 }).map((_, i) => <ServiceCardSkeleton key={i} />)}
           </div>
         ) : services.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-4 gap-y-8 w-full">
             {services.map(service => <ServiceCard key={service.id} service={service} />)}
           </div>
         ) : (
           <div className="text-center py-20">
-            <p className="text-gray-400 text-lg font-medium">No services found</p>
-            <p className="text-gray-300 text-sm mt-1">Try a different search or category</p>
+            <p className="text-gray-400 text-lg font-medium">
+              {searchQuery
+                ? `No results for “${searchQuery}”`
+                : activeLocation
+                  ? `No services in ${LOCATION_OPTIONS.find(o => o.value === activeLocation)?.label ?? 'this location'}`
+                  : 'No services found'}
+            </p>
+            <p className="text-gray-300 text-sm mt-1">
+              {searchQuery ? 'Try a different search term or clear filters.' : 'Try a different category or location'}
+            </p>
           </div>
         )}
       </main>

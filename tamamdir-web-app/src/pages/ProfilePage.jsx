@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
-  CheckCircle2, User, Sliders, Wrench, Shield, Settings,
+  CheckCircle2, Sliders, Shield, Settings,
   HelpCircle, LogOut, Trash2, Eye, EyeOff, Plus, AlertTriangle,
-  Loader2, ShoppingBag, AlertCircle, Camera, X,
+  Loader2, ShoppingBag, AlertCircle, Camera, X, ArchiveRestore,
 } from 'lucide-react'
-import Navbar from '../components/Navbar'
 import { useAuth } from '../context/AuthContext'
 import api from '../lib/api'
-import { formatPrice } from '../lib/utils'
+import { formatPrice, resolveMediaUrl, cn } from '../lib/utils'
+import { PROFILE_TABS } from '../constants/profileNav'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ function PersonalInfo({ user, onAvatarUpdated, onProfileUpdated }) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Personal Info</h2>
+        <h2 className="text-2xl font-bold text-coffee mb-1">Personal Info</h2>
         <p className="text-gray-500 text-sm">Manage your personal information and public profile.</p>
       </div>
 
@@ -120,7 +120,7 @@ function PersonalInfo({ user, onAvatarUpdated, onProfileUpdated }) {
         <div className="flex items-center gap-4">
           <div className="relative">
             {user.avatar_url ? (
-              <img src={user.avatar_url} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-gray-100" />
+              <img src={resolveMediaUrl(user.avatar_url)} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-gray-100" />
             ) : (
               <div className="w-20 h-20 rounded-full bg-green-pale flex items-center justify-center border-2 border-gray-100">
                 <span className="text-green-primary font-bold text-2xl">{user.full_name?.[0] ?? '?'}</span>
@@ -145,7 +145,7 @@ function PersonalInfo({ user, onAvatarUpdated, onProfileUpdated }) {
             />
           </div>
           <div>
-            <p className="font-semibold text-gray-900">{user.full_name}</p>
+            <p className="font-semibold text-coffee">{user.full_name}</p>
             <p className="text-sm text-gray-500">{user.department ?? 'No department set'}</p>
             {user.is_verified_student && (
               <div className="flex items-center gap-1.5 mt-1">
@@ -164,7 +164,7 @@ function PersonalInfo({ user, onAvatarUpdated, onProfileUpdated }) {
           <div key={key} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
             <div className="flex-1 min-w-0 pr-4">
               <p className="text-xs text-gray-400 mb-0.5">{label}</p>
-              <p className="text-sm font-medium text-gray-900">{user[key] ?? '—'}</p>
+              <p className="text-sm font-medium text-gray-400">{user[key] ?? '—'}</p>
             </div>
             {editable && (
               <button
@@ -182,7 +182,7 @@ function PersonalInfo({ user, onAvatarUpdated, onProfileUpdated }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="text-lg font-semibold text-coffee">
                 Edit {PERSONAL_FIELDS.find(f => f.key === editingField)?.label}
               </h3>
               <button
@@ -220,7 +220,7 @@ function PersonalInfo({ user, onAvatarUpdated, onProfileUpdated }) {
               <button
                 onClick={closeEdit}
                 disabled={saving}
-                className="text-sm font-medium text-gray-500 hover:text-gray-700 px-4 py-2"
+                className="text-sm font-medium text-gray-500 hover:text-gray-900 px-4 py-2"
               >
                 Cancel
               </button>
@@ -244,51 +244,128 @@ function PersonalInfo({ user, onAvatarUpdated, onProfileUpdated }) {
 function ServiceManagement({ userId }) {
   const [services, setServices] = useState([])
   const [loading, setLoading] = useState(true)
-  const [confirmRemove, setConfirmRemove] = useState(null)
-  const [removing, setRemoving] = useState(false)
-  const [removeError, setRemoveError] = useState('')
+  const [confirmArchive, setConfirmArchive] = useState(null)
+  const [updatingId, setUpdatingId] = useState(null)
+  const [actionError, setActionError] = useState('')
 
-  useEffect(() => {
+  const loadServices = () => {
     if (!userId) return
-    api.get(`/api/users/${userId}/services`)
+    setLoading(true)
+    api.get(`/api/users/${userId}/services?all=1`)
       .then(setServices)
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [userId])
-
-  const closeRemoveModal = () => {
-    if (removing) return
-    setConfirmRemove(null)
-    setRemoveError('')
   }
 
-  const handleConfirmRemove = async () => {
-    if (!confirmRemove) return
-    setRemoveError('')
-    setRemoving(true)
+  useEffect(() => {
+    loadServices()
+  }, [userId])
+
+  const sortedServices = [...services].sort((a, b) => {
+    const aActive = a.is_active !== 0 && a.is_active !== false
+    const bActive = b.is_active !== 0 && b.is_active !== false
+    if (aActive !== bActive) return aActive ? -1 : 1
+    return 0
+  })
+
+  const isServiceActive = (svc) => svc.is_active !== 0 && svc.is_active !== false
+
+  const closeArchiveModal = () => {
+    if (updatingId) return
+    setConfirmArchive(null)
+    setActionError('')
+  }
+
+  const setServiceActive = async (svc, isActive) => {
+    setActionError('')
+    setUpdatingId(svc.id)
     try {
-      await api.del(`/api/services/${confirmRemove.id}`)
-      setServices(prev => prev.filter(s => s.id !== confirmRemove.id))
-      setConfirmRemove(null)
+      await api.patch(`/api/services/${svc.id}`, { is_active: isActive })
+      setServices(prev => prev.map(s => (
+        s.id === svc.id ? { ...s, is_active: isActive ? 1 : 0 } : s
+      )))
+      setConfirmArchive(null)
     } catch (err) {
-      setRemoveError(err.message || 'Failed to remove service.')
+      setActionError(err.message || 'Failed to update service.')
     } finally {
-      setRemoving(false)
+      setUpdatingId(null)
     }
+  }
+
+  const renderServiceRow = (svc) => {
+    const active = isServiceActive(svc)
+    return (
+      <div
+        key={svc.id}
+        className={cn(
+          'flex items-center justify-between rounded-xl px-4 py-3.5',
+          active ? 'bg-gray-50' : 'bg-gray-50/60 border border-dashed border-gray-200 opacity-80'
+        )}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={cn(
+            'w-9 h-9 rounded-xl flex items-center justify-center shrink-0',
+            active ? 'bg-green-pale' : 'bg-gray-100'
+          )}>
+            <CheckCircle2 className={cn('w-4 h-4', active ? 'text-green-primary' : 'text-gray-400')} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className={cn('text-sm font-semibold truncate', active ? 'text-coffee' : 'text-gray-500')}>
+                {svc.title}
+              </p>
+              {!active && (
+                <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
+                  Archived
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400">
+              {svc.category_name} · {formatPrice(svc.price, svc.price_unit)}
+            </p>
+          </div>
+        </div>
+        {active ? (
+          <button
+            type="button"
+            onClick={() => setConfirmArchive(svc)}
+            disabled={updatingId === svc.id}
+            className="flex items-center gap-1.5 text-amber-700 hover:text-amber-900 text-sm font-medium transition-colors disabled:opacity-60 shrink-0 ml-3"
+          >
+            <Trash2 className="w-4 h-4" />
+            Archive
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setServiceActive(svc, true)}
+            disabled={updatingId === svc.id}
+            className="flex items-center gap-1.5 text-green-primary hover:text-green-dark text-sm font-medium transition-colors disabled:opacity-60 shrink-0 ml-3"
+          >
+            {updatingId === svc.id ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <ArchiveRestore className="w-4 h-4" />
+            )}
+            Unarchive
+          </button>
+        )}
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Service Management</h2>
+        <h2 className="text-2xl font-bold text-coffee mb-1">Service Management</h2>
         <p className="text-gray-500 text-sm">Manage the services you offer to other students on the marketplace.</p>
       </div>
 
       <div className="card p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-semibold text-gray-900">Your Active Services</h3>
-            <p className="text-sm text-gray-400">These services are currently visible to other students.</p>
+            <h3 className="font-semibold text-coffee">Your Services</h3>
+            <p className="text-sm text-gray-400">Active listings are visible on the marketplace. Archived ones stay here — unarchive anytime.</p>
           </div>
           <Link
             to="/services/new"
@@ -305,32 +382,11 @@ function ServiceManagement({ userId }) {
           </div>
         ) : services.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">
-            You haven't listed any services yet.
+            You haven&apos;t listed any services yet.
           </p>
         ) : (
           <div className="space-y-3 mb-4">
-            {services.map(svc => (
-              <div key={svc.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3.5">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-green-pale rounded-xl flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="w-4 h-4 text-green-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{svc.title}</p>
-                    <p className="text-xs text-gray-400">
-                      {svc.category_name} · {formatPrice(svc.price, svc.price_unit)}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setConfirmRemove(svc)}
-                  className="flex items-center gap-1.5 text-red-400 hover:text-red-600 text-sm font-medium transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Remove
-                </button>
-              </div>
-            ))}
+            {sortedServices.map(svc => renderServiceRow(svc))}
           </div>
         )}
 
@@ -345,7 +401,7 @@ function ServiceManagement({ userId }) {
             <Eye className="w-4 h-4 text-amber-500" />
           </div>
           <div className="text-left">
-            <p className="font-medium text-gray-900 text-sm">Public Profile Preview</p>
+            <p className="font-medium text-gray-700 text-sm">Public Profile Preview</p>
             <p className="text-xs text-gray-400">See how others view you.</p>
           </div>
         </div>
@@ -354,42 +410,42 @@ function ServiceManagement({ userId }) {
         </svg>
       </button>
 
-      {confirmRemove && (
+      {confirmArchive && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-11 h-11 bg-red-50 rounded-xl flex items-center justify-center shrink-0">
-                <Trash2 className="w-5 h-5 text-red-400" />
+              <div className="w-11 h-11 bg-amber-50 rounded-xl flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-amber-600" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Remove Service</h3>
-                <p className="text-sm text-gray-500 truncate">{confirmRemove.title}</p>
+                <h3 className="text-lg font-semibold text-coffee">Archive Service</h3>
+                <p className="text-sm text-gray-500 truncate">{confirmArchive.title}</p>
               </div>
             </div>
 
             <p className="text-sm text-gray-600 mb-5">
-              Are you sure you want to remove this service?
+              This hides the listing from the marketplace. It will stay in your list — use Unarchive to publish it again.
             </p>
 
-            {removeError && (
-              <p className="text-xs text-red-500 mb-4">{removeError}</p>
+            {actionError && (
+              <p className="text-xs text-red-500 mb-4">{actionError}</p>
             )}
 
             <div className="flex justify-end gap-3">
               <button
-                onClick={closeRemoveModal}
-                disabled={removing}
-                className="text-sm font-medium text-gray-500 hover:text-gray-700 px-4 py-2"
+                onClick={closeArchiveModal}
+                disabled={!!updatingId}
+                className="text-sm font-medium text-gray-500 hover:text-gray-900 px-4 py-2"
               >
                 Cancel
               </button>
               <button
-                onClick={handleConfirmRemove}
-                disabled={removing}
-                className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-60"
+                onClick={() => setServiceActive(confirmArchive, false)}
+                disabled={!!updatingId}
+                className="flex items-center gap-2 bg-amber-700 hover:bg-amber-800 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-60"
               >
-                {removing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                Remove
+                {updatingId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Archive
               </button>
             </div>
           </div>
@@ -420,7 +476,7 @@ function OrdersTab({ userId }) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Orders</h2>
+        <h2 className="text-2xl font-bold text-coffee mb-1">Orders</h2>
         <p className="text-gray-500 text-sm">Track your orders as a buyer and provider.</p>
       </div>
 
@@ -463,13 +519,13 @@ function OrdersTab({ userId }) {
             return (
               <div key={order.id} className="card p-4 flex items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 text-sm truncate">{order.service_title}</p>
+                  <p className="font-semibold text-coffee text-sm truncate">{order.service_title}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
                     {role === 'buyer' ? 'Provider' : 'Buyer'}: {other} · {formatDate(order.created_at)}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-sm font-semibold text-gray-900">
+                  <span className="text-sm font-semibold text-coffee">
                     ₺{order.price_at_order}
                   </span>
                   <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.cls}`}>
@@ -518,14 +574,14 @@ function PersonalizationTab({ user, onInterestsUpdated }) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Personalization</h2>
+        <h2 className="text-2xl font-bold text-coffee mb-1">Personalization</h2>
         <p className="text-gray-500 text-sm">Customize your experience on Tamamdır.</p>
       </div>
 
       <div className="card p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-semibold text-gray-900">Your Interests</h3>
+            <h3 className="font-semibold text-coffee">Your Interests</h3>
             <p className="text-sm text-gray-400 mt-0.5">
               {interests.length === 0
                 ? 'No interests selected yet.'
@@ -555,7 +611,7 @@ function PersonalizationTab({ user, onInterestsUpdated }) {
                   <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-xl shadow-sm border border-gray-100 shrink-0">
                     {INTEREST_EMOJI[interest.icon] ?? '✨'}
                   </div>
-                  <p className="text-sm font-semibold text-gray-900 truncate">{interest.name}</p>
+                  <p className="text-sm font-semibold text-coffee truncate">{interest.name}</p>
                 </div>
                 <button
                   onClick={() => setRemoving(interest)}
@@ -578,7 +634,7 @@ function PersonalizationTab({ user, onInterestsUpdated }) {
                 {INTEREST_EMOJI[removing.icon] ?? '✨'}
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Remove Interest</h3>
+                <h3 className="text-lg font-semibold text-coffee">Remove Interest</h3>
                 <p className="text-sm text-gray-500">{removing.name}</p>
               </div>
             </div>
@@ -595,7 +651,7 @@ function PersonalizationTab({ user, onInterestsUpdated }) {
               <button
                 onClick={closeRemoveModal}
                 disabled={saving}
-                className="text-sm font-medium text-gray-500 hover:text-gray-700 px-4 py-2"
+                className="text-sm font-medium text-gray-500 hover:text-gray-900 px-4 py-2"
               >
                 Cancel
               </button>
@@ -621,7 +677,7 @@ function SecurityTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Security</h2>
+        <h2 className="text-2xl font-bold text-coffee mb-1">Security</h2>
         <p className="text-gray-500 text-sm">Manage your account security settings.</p>
       </div>
       <div className="card p-6 space-y-4">
@@ -631,7 +687,7 @@ function SecurityTab() {
         ].map(({ label, desc, action }) => (
           <div key={label} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
             <div>
-              <p className="text-sm font-medium text-gray-900">{label}</p>
+              <p className="text-sm font-medium text-gray-700">{label}</p>
               <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
             </div>
             <button className="text-sm font-semibold text-green-primary hover:underline">{action}</button>
@@ -748,7 +804,7 @@ function AccountManagement({ user, onUserUpdated, logout }) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Account Management</h2>
+        <h2 className="text-2xl font-bold text-coffee mb-1">Account Management</h2>
         <p className="text-gray-500 text-sm">View and manage your core account settings and data preferences.</p>
       </div>
 
@@ -764,14 +820,14 @@ function AccountManagement({ user, onUserUpdated, logout }) {
       <div className="card p-6 space-y-4">
         <div className="flex items-center gap-2 mb-2">
           <Settings className="w-4 h-4 text-gray-400" />
-          <h3 className="font-semibold text-gray-900 text-sm">Primary Account Details</h3>
+          <h3 className="font-semibold text-gray-400 text-sm">Primary Account Details</h3>
         </div>
         <div className="bg-gray-50 rounded-xl p-4">
           {user.is_verified_student ? (
             <>
               <p className="text-xs text-gray-400 mb-1">University Email</p>
               <div className="flex items-center gap-3">
-                <p className="text-sm font-semibold text-gray-900">{user.email}</p>
+                <p className="text-sm font-semibold text-coffee">{user.email}</p>
                 <span className="flex items-center gap-1 bg-green-pale text-green-primary text-xs font-semibold px-2.5 py-0.5 rounded-full">
                   <CheckCircle2 className="w-3 h-3" />
                   Verified
@@ -784,7 +840,7 @@ function AccountManagement({ user, onUserUpdated, logout }) {
           ) : (
             <>
               <p className="text-xs text-gray-400 mb-1">Email</p>
-              <p className="text-sm font-semibold text-gray-900">{user.email}</p>
+              <p className="text-sm font-semibold text-gray-400">{user.email}</p>
             </>
           )}
         </div>
@@ -793,11 +849,11 @@ function AccountManagement({ user, onUserUpdated, logout }) {
       <div className="card p-6 space-y-4">
         <div className="flex items-center gap-2 mb-2">
           <Shield className="w-4 h-4 text-gray-400" />
-          <h3 className="font-semibold text-gray-900 text-sm">Account Security</h3>
+          <h3 className="font-semibold text-gray-400 text-sm">Account Security</h3>
         </div>
         <div className="flex items-center justify-between py-3">
           <div>
-            <p className="text-sm font-medium text-gray-900">Password</p>
+            <p className="text-sm font-medium text-gray-700">Password</p>
             <p className="text-xs text-gray-400 mt-0.5">Update your password</p>
           </div>
           <button
@@ -812,7 +868,7 @@ function AccountManagement({ user, onUserUpdated, logout }) {
       <div className="card p-6 space-y-4">
         <div className="flex items-center gap-2 mb-2">
           <Settings className="w-4 h-4 text-gray-400" />
-          <h3 className="font-semibold text-gray-900 text-sm">Data & Privacy</h3>
+          <h3 className="font-semibold text-gray-400 text-sm">Data & Privacy</h3>
         </div>
         <p className="text-sm text-gray-500">Control how your data is used and stored within the Tamamdır platform.</p>
         <div className="grid grid-cols-2 gap-3">
@@ -886,7 +942,7 @@ function AccountManagement({ user, onUserUpdated, logout }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Change Password</h3>
+              <h3 className="text-lg font-semibold text-coffee">Change Password</h3>
               <button
                 onClick={closePasswordModal}
                 disabled={passwordSaving}
@@ -957,7 +1013,7 @@ function AccountManagement({ user, onUserUpdated, logout }) {
                   type="button"
                   onClick={closePasswordModal}
                   disabled={passwordSaving}
-                  className="text-sm font-medium text-gray-500 hover:text-gray-700 px-4 py-2"
+                  className="text-sm font-medium text-gray-500 hover:text-gray-900 px-4 py-2"
                 >
                   Cancel
                 </button>
@@ -977,7 +1033,7 @@ function AccountManagement({ user, onUserUpdated, logout }) {
       {showDeactivateConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Deactivate Account</h3>
+            <h3 className="text-lg font-semibold text-coffee mb-2">Deactivate Account</h3>
             <p className="text-sm text-gray-600 mb-5">
               Are you sure you want to deactivate your account? Your profile and service listings will be hidden.
             </p>
@@ -985,7 +1041,7 @@ function AccountManagement({ user, onUserUpdated, logout }) {
               <button
                 onClick={() => setShowDeactivateConfirm(false)}
                 disabled={actionLoading}
-                className="text-sm font-medium text-gray-500 hover:text-gray-700 px-4 py-2"
+                className="text-sm font-medium text-gray-500 hover:text-gray-900 px-4 py-2"
               >
                 Cancel
               </button>
@@ -1004,7 +1060,7 @@ function AccountManagement({ user, onUserUpdated, logout }) {
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Account</h3>
+            <h3 className="text-lg font-semibold text-coffee mb-2">Delete Account</h3>
             <p className="text-sm text-gray-600 mb-5">
               Are you sure you want to permanently delete your account? This action cannot be undone.
             </p>
@@ -1012,7 +1068,7 @@ function AccountManagement({ user, onUserUpdated, logout }) {
               <button
                 onClick={() => setShowDeleteConfirm(false)}
                 disabled={actionLoading}
-                className="text-sm font-medium text-gray-500 hover:text-gray-700 px-4 py-2"
+                className="text-sm font-medium text-gray-500 hover:text-gray-900 px-4 py-2"
               >
                 Cancel
               </button>
@@ -1033,15 +1089,6 @@ function AccountManagement({ user, onUserUpdated, logout }) {
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-
-const TABS = [
-  { id: 'personal',        label: 'Personal Info',       icon: User       },
-  { id: 'personalization', label: 'Personalization',     icon: Sliders    },
-  { id: 'services',        label: 'Service Management',  icon: Wrench     },
-  { id: 'orders',          label: 'Orders',              icon: ShoppingBag },
-  { id: 'security',        label: 'Security',            icon: Shield     },
-  { id: 'account',         label: 'Account Management',  icon: Settings   },
-]
 
 export default function ProfilePage() {
   const { user, logout, me } = useAuth()
@@ -1085,7 +1132,7 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-amber-50 flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-green-primary animate-spin" />
       </div>
     )
@@ -1104,17 +1151,15 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-amber-50">
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 bg-white rounded-xl shadow-lg border border-green-pale px-4 py-3 flex items-center gap-3 animate-in">
           <div className="w-8 h-8 bg-green-pale rounded-full flex items-center justify-center">
             <CheckCircle2 className="w-4 h-4 text-green-primary" />
           </div>
-          <p className="text-sm font-medium text-gray-800">{toast}</p>
+          <p className="text-sm font-medium text-gray-700">{toast}</p>
         </div>
       )}
-
-      <Navbar />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         <div className="flex gap-6">
@@ -1125,7 +1170,7 @@ export default function ProfilePage() {
                 <div className="relative inline-block mb-3">
                   {user.avatar_url ? (
                     <img
-                      src={user.avatar_url}
+                      src={resolveMediaUrl(user.avatar_url)}
                       alt=""
                       className="w-20 h-20 rounded-full object-cover border-4 border-gray-50 shadow-sm"
                     />
@@ -1140,7 +1185,7 @@ export default function ProfilePage() {
                     </div>
                   )}
                 </div>
-                <p className="font-semibold text-gray-900 text-sm">
+                <p className="font-semibold text-coffee text-sm">
                   {user.full_name?.split(' ')[0]} Profile
                 </p>
                 {user.is_verified_student && (
@@ -1152,7 +1197,7 @@ export default function ProfilePage() {
               </div>
 
               <nav className="p-3 space-y-1">
-                {TABS.map(({ id, label, icon: Icon }) => (
+                {PROFILE_TABS.map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
                     onClick={() => setActiveTab(id)}

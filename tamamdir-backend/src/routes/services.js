@@ -264,12 +264,17 @@ const { run, get, all } = require('../config/database');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { serviceImageUpload } = require('../middleware/upload');
 
+const { LOCATION_TYPES } = require('../constants/locations');
+
+
 // ── GET /api/services ───────────────────────────────────────────────────────
 router.get('/', optionalAuth, async (req, res, next) => {
   try {
     const {
       q,            // free-text search
       category,     // category slug or id
+      location_type: locationTypeFilter, // preferred query param
+      location,     // legacy alias
       interests,    // "1" or "true" — filter to authenticated user's interest categories
       min_price,
       max_price,
@@ -290,6 +295,16 @@ router.get('/', optionalAuth, async (req, res, next) => {
     if (category) {
       where.push('(c.slug = ? OR c.id = ?)');
       params.push(category, category);
+    }
+
+    const locationFilter = locationTypeFilter || location;
+    if (locationFilter) {
+      if (LOCATION_TYPES.includes(locationFilter)) {
+        where.push('s.location_type = ?');
+        params.push(locationFilter);
+      } else {
+        where.push('1 = 0');
+      }
     }
 
     if (interests === '1' || interests === 'true') {
@@ -390,13 +405,22 @@ router.post(
     body('price').isFloat({ min: 1 }),
     body('price_unit').optional().isIn(['session', 'hour', 'item', 'day', 'piece']),
     body('delivery_days').optional().isInt({ min: 1, max: 90 }),
+    body('location_type').optional().isIn(LOCATION_TYPES),
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
 
     try {
-      const { title, description, category_id, price, price_unit = 'session', delivery_days = 1 } = req.body;
+      const {
+        title,
+        description,
+        category_id,
+        price,
+        price_unit = 'session',
+        delivery_days = 1,
+        location_type = 'on_campus',
+      } = req.body;
 
       // Verify category exists
       const cat = await get('SELECT id FROM categories WHERE id = ?', [category_id]);
@@ -404,9 +428,9 @@ router.post(
 
       const id = uuidv4();
       await run(
-        `INSERT INTO services (id, provider_id, category_id, title, description, price, price_unit, delivery_days)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, req.user.id, category_id, title, description, price, price_unit, delivery_days]
+        `INSERT INTO services (id, provider_id, category_id, title, description, price, price_unit, delivery_days, location_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, req.user.id, category_id, title, description, price, price_unit, delivery_days, location_type]
       );
 
       // Mark user as provider
@@ -441,6 +465,7 @@ router.patch(
     body('price').optional().toFloat().isFloat({ min: 1 }),
     body('price_unit').optional().isIn(['session', 'hour', 'item', 'day', 'piece']),
     body('delivery_days').optional().toInt().isInt({ min: 1, max: 90 }),
+    body('location_type').optional().isIn(LOCATION_TYPES),
     body('is_active').optional().custom((v) => v === true || v === false || v === 0 || v === 1),
   ],
   async (req, res, next) => {
@@ -452,7 +477,7 @@ router.patch(
       if (!existing) return res.status(404).json({ error: 'Service not found' });
       if (existing.provider_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
 
-      const fields  = ['title', 'description', 'price', 'price_unit', 'delivery_days', 'is_active'];
+      const fields  = ['title', 'description', 'price', 'price_unit', 'delivery_days', 'location_type', 'is_active'];
       const updates = [];
       const values  = [];
 
