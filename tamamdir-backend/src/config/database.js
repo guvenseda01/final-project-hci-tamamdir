@@ -171,6 +171,14 @@ const SCHEMA_STATEMENTS = [
     created_at TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE INDEX IF NOT EXISTS idx_email_verifications_user ON email_verifications(user_id)`,
+  `CREATE TABLE IF NOT EXISTS password_resets (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash  TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_services_provider ON services(provider_id)`,
   `CREATE INDEX IF NOT EXISTS idx_services_category ON services(category_id)`,
   `CREATE INDEX IF NOT EXISTS idx_orders_buyer      ON orders(buyer_id)`,
