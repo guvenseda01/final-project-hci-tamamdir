@@ -1,6 +1,18 @@
 const router = require('express').Router();
-const { all, run } = require('../config/database');
+const { all, run, get } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+
+router.get('/unread-count', requireAuth, async (req, res, next) => {
+  try {
+    const row = await get(
+      'SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND is_read = 0',
+      [req.user.id]
+    );
+    res.json({ count: parseInt(row?.n ?? 0, 10) });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get('/', requireAuth, async (req, res, next) => {
   try {

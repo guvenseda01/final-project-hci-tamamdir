@@ -100,8 +100,7 @@ const SCHEMA_STATEMENTS = [
     service_id    TEXT REFERENCES services(id),
     last_message  TEXT,
     last_msg_at   TIMESTAMPTZ,
-    created_at    TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE (participant_a, participant_b)
+    created_at    TIMESTAMPTZ DEFAULT NOW()
   )`,
   `CREATE TABLE IF NOT EXISTS messages (
     id              TEXT PRIMARY KEY,
@@ -135,6 +134,15 @@ const SCHEMA_STATEMENTS = [
     service_id  TEXT NOT NULL REFERENCES services(id),
     reviewer_id TEXT NOT NULL REFERENCES users(id),
     provider_id TEXT NOT NULL REFERENCES users(id),
+    rating      INTEGER NOT NULL,
+    comment     TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS user_reviews (
+    id          TEXT PRIMARY KEY,
+    order_id    TEXT NOT NULL UNIQUE REFERENCES orders(id),
+    reviewer_id TEXT NOT NULL REFERENCES users(id),
+    reviewee_id TEXT NOT NULL REFERENCES users(id),
     rating      INTEGER NOT NULL,
     comment     TEXT,
     created_at  TIMESTAMPTZ DEFAULT NOW()
@@ -251,6 +259,30 @@ async function initDB() {
         LOWER(email) LIKE '%@iyte.edu.tr'
         OR LOWER(email) LIKE '%@std.iyte.edu.tr'
       )
+  `);
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_rating REAL DEFAULT 0.0'
+  );
+  await pool.query(
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_review_count INTEGER DEFAULT 0'
+  );
+
+  // Allow multiple conversations per pair (one per service)
+  await pool.query(`
+    DO $$ BEGIN
+      ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_participant_a_participant_b_key;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END $$;
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS conversations_pair_service_unique
+    ON conversations (participant_a, participant_b, service_id)
+    WHERE service_id IS NOT NULL
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS conversations_pair_legacy_unique
+    ON conversations (participant_a, participant_b)
+    WHERE service_id IS NULL
   `);
 
   await seed();

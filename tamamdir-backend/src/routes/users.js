@@ -217,7 +217,8 @@ router.get('/:id', async (req, res, next) => {
   try {
     const user = await get(
       `SELECT id, full_name, avatar_url, bio, department, year,
-              is_verified, is_verified_student, is_provider, rating, review_count, created_at,
+              is_verified, is_verified_student, is_provider, rating, review_count,
+              customer_rating, customer_review_count, created_at,
               is_active, deleted_at
        FROM users WHERE id = ?`,
       [req.params.id]

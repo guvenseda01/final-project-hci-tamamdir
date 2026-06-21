@@ -180,13 +180,150 @@ async function linkServiceToConversation(conv, serviceId, userId) {
     throw err;
   }
 
-  await run('UPDATE conversations SET service_id = ? WHERE id = ?', [serviceId, conv.id]);
+  if (conv.service_id && conv.service_id !== serviceId) {
+    const err = new Error('Conversation is already linked to a different service');
+    err.status = 409;
+    throw err;
+  }
+
+  if (!conv.service_id) {
+    await run('UPDATE conversations SET service_id = ? WHERE id = ?', [serviceId, conv.id]);
+  }
   return get('SELECT * FROM conversations WHERE id = ?', [conv.id]);
+}
+
+async function findOrCreateConversation(userId, recipientId, serviceId) {
+  if (!serviceId) {
+    const err = new Error('service_id is required');
+    err.status = 400;
+    throw err;
+  }
+
+  const [a, b] = [userId, recipientId].sort();
+
+  const service = await get('SELECT id, provider_id FROM services WHERE id = ?', [serviceId]);
+  if (!service) {
+    const err = new Error('Service not found');
+    err.status = 404;
+    throw err;
+  }
+  if (service.provider_id !== userId && service.provider_id !== recipientId) {
+    const err = new Error('Service is not part of this conversation');
+    err.status = 400;
+    throw err;
+  }
+
+  let conv = await get(
+    'SELECT * FROM conversations WHERE participant_a = ? AND participant_b = ? AND service_id = ?',
+    [a, b, serviceId]
+  );
+  if (!conv) {
+    const id = uuidv4();
+    await run(
+      'INSERT INTO conversations (id, participant_a, participant_b, service_id) VALUES (?, ?, ?, ?)',
+      [id, a, b, serviceId]
+    );
+    conv = await get('SELECT * FROM conversations WHERE id = ?', [id]);
+  }
+  return conv;
+}
+
+/** Ensure one conversation per (buyer, provider, service) from orders — dual-role chats. */
+async function ensureConversationsFromOrders(userId) {
+  const pairs = await all(
+    `SELECT DISTINCT buyer_id, provider_id, service_id
+     FROM orders
+     WHERE buyer_id = ? OR provider_id = ?`,
+    [userId, userId]
+  );
+
+  for (const row of pairs) {
+    try {
+      await findOrCreateConversation(row.buyer_id, row.provider_id, row.service_id);
+    } catch {
+      // skip invalid legacy rows
+    }
+  }
+}
+
+function mapConversationRow(row, userId) {
+  const myRole = row.service_provider_id
+    ? (row.service_provider_id === userId ? 'provider' : 'customer')
+    : null;
+  return {
+    ...row,
+    my_role: myRole,
+    is_service_provider: myRole === 'provider',
+  };
+}
+
+async function loadServiceForConversation(serviceId, userId, otherId) {
+  const service = await get(
+    'SELECT id, title, price, price_unit, provider_id FROM services WHERE id = ?',
+    [serviceId]
+  );
+  if (!service) return null;
+  if (service.provider_id !== userId && service.provider_id !== otherId) return null;
+  return service;
+}
+
+async function resolveConversationServiceContext(conv, userId, preferredServiceId) {
+  const otherId = conv.participant_a === userId ? conv.participant_b : conv.participant_a;
+
+  if (preferredServiceId) {
+    const preferred = await loadServiceForConversation(preferredServiceId, userId, otherId);
+    if (preferred) return preferred;
+  }
+
+  if (conv.service_id) {
+    const linked = await loadServiceForConversation(conv.service_id, userId, otherId);
+    if (linked) return linked;
+  }
+
+  const fromTamamdir = await get(
+    `SELECT s.id, s.title, s.price, s.price_unit, s.provider_id
+     FROM conversation_tamamdir ct
+     JOIN services s ON s.id = ct.service_id
+     WHERE ct.conversation_id = ?
+     ORDER BY ct.confirmed_at DESC
+     LIMIT 1`,
+    [conv.id]
+  );
+  if (fromTamamdir) return fromTamamdir;
+
+  const fromOrder = await get(
+    `SELECT s.id, s.title, s.price, s.price_unit, s.provider_id
+     FROM orders o
+     JOIN services s ON s.id = o.service_id
+     WHERE (o.buyer_id = ? AND o.provider_id = ?) OR (o.buyer_id = ? AND o.provider_id = ?)
+     ORDER BY o.updated_at DESC
+     LIMIT 1`,
+    [userId, otherId, otherId, userId]
+  );
+  if (fromOrder) return fromOrder;
+
+  return null;
 }
 
 // ── GET /api/messages/conversations ─────────────────────────────────────────
 router.get('/conversations', requireAuth, async (req, res, next) => {
   try {
+    await ensureConversationsFromOrders(req.user.id);
+
+    const { role } = req.query;
+    const params = [
+      req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id,
+    ];
+    let roleClause = '';
+
+    if (role === 'provider') {
+      roleClause = 'AND svc.provider_id = ?';
+      params.push(req.user.id);
+    } else if (role === 'customer') {
+      roleClause = 'AND svc.id IS NOT NULL AND svc.provider_id != ?';
+      params.push(req.user.id);
+    }
+
     const convs = await all(
       `SELECT c.*,
               CASE WHEN c.participant_a = ? THEN u_b.full_name  ELSE u_a.full_name  END AS other_name,
@@ -195,28 +332,30 @@ router.get('/conversations', requireAuth, async (req, res, next) => {
               svc.title AS service_title,
               svc.price AS service_price,
               svc.price_unit AS service_price_unit,
+              svc.provider_id AS service_provider_id,
               (SELECT COUNT(*) FROM messages m
                WHERE m.conversation_id = c.id AND m.is_read = 0 AND m.sender_id != ?) AS unread_count
        FROM conversations c
        JOIN users u_a ON u_a.id = c.participant_a
        JOIN users u_b ON u_b.id = c.participant_b
        LEFT JOIN services svc ON svc.id = c.service_id
-       WHERE c.participant_a = ? OR c.participant_b = ?
-       ORDER BY c.last_msg_at DESC`,
-      [req.user.id, req.user.id, req.user.id, req.user.id, req.user.id, req.user.id]
+       WHERE (c.participant_a = ? OR c.participant_b = ?)
+       ${roleClause}
+       ORDER BY c.last_msg_at DESC NULLS LAST, c.created_at DESC`,
+      params
     );
-    return res.json(convs);
+    return res.json(convs.map(row => mapConversationRow(row, req.user.id)));
   } catch (err) {
     next(err);
   }
 });
 
 // ── POST /api/messages/conversations ────────────────────────────────────────
-// Body: { recipient_id, service_id? }
+// Body: { recipient_id, service_id }
 router.post(
   '/conversations',
   requireAuth,
-  [body('recipient_id').notEmpty(), body('service_id').optional().notEmpty()],
+  [body('recipient_id').notEmpty(), body('service_id').notEmpty()],
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
@@ -230,28 +369,25 @@ router.post(
       const recipient = await get('SELECT id FROM users WHERE id = ?', [recipient_id]);
       if (!recipient) return res.status(404).json({ error: 'Recipient not found' });
 
-      // Canonical order: lower UUID first
-      const [a, b] = [req.user.id, recipient_id].sort();
-
-      let conv = await get(
-        'SELECT * FROM conversations WHERE participant_a = ? AND participant_b = ?',
-        [a, b]
+      const conv = await findOrCreateConversation(req.user.id, recipient_id, service_id);
+      const enriched = await get(
+        `SELECT c.*,
+                CASE WHEN c.participant_a = ? THEN u_b.full_name ELSE u_a.full_name END AS other_name,
+                CASE WHEN c.participant_a = ? THEN u_b.avatar_url ELSE u_a.avatar_url END AS other_avatar,
+                CASE WHEN c.participant_a = ? THEN c.participant_b ELSE c.participant_a END AS other_id,
+                svc.title AS service_title,
+                svc.price AS service_price,
+                svc.price_unit AS service_price_unit,
+                svc.provider_id AS service_provider_id
+         FROM conversations c
+         JOIN users u_a ON u_a.id = c.participant_a
+         JOIN users u_b ON u_b.id = c.participant_b
+         LEFT JOIN services svc ON svc.id = c.service_id
+         WHERE c.id = ?`,
+        [req.user.id, req.user.id, req.user.id, conv.id]
       );
 
-      if (!conv) {
-        const id = uuidv4();
-        await run(
-          'INSERT INTO conversations (id, participant_a, participant_b) VALUES (?, ?, ?)',
-          [id, a, b]
-        );
-        conv = await get('SELECT * FROM conversations WHERE id = ?', [id]);
-      }
-
-      if (service_id) {
-        conv = await linkServiceToConversation(conv, service_id, req.user.id);
-      }
-
-      return res.status(201).json(conv);
+      return res.status(201).json(mapConversationRow(enriched, req.user.id));
     } catch (err) {
       if (err.status) return res.status(err.status).json({ error: err.message });
       next(err);
@@ -281,6 +417,35 @@ router.patch(
     }
   }
 );
+
+// ── GET /api/messages/conversations/:id/service-context ─────────────────────
+router.get('/conversations/:id/service-context', requireAuth, async (req, res, next) => {
+  try {
+    const conv = await getConversationForUser(req.params.id, req.user.id);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+
+    const service = await resolveConversationServiceContext(
+      conv,
+      req.user.id,
+      req.query.service_id || null
+    );
+
+    if (!service) {
+      return res.json({ service_id: null });
+    }
+
+    return res.json({
+      service_id: service.id,
+      service_title: service.title,
+      service_price: service.price,
+      service_price_unit: service.price_unit,
+      provider_id: service.provider_id,
+      is_service_provider: service.provider_id === req.user.id,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // ── GET /api/messages/conversations/:id ─────────────────────────────────────
 router.get('/conversations/:id', requireAuth, async (req, res, next) => {
@@ -361,13 +526,15 @@ router.post(
       const recipientId =
         conv.participant_a === req.user.id ? conv.participant_b : conv.participant_a;
       const sender = await get('SELECT full_name FROM users WHERE id = ?', [req.user.id]);
+      const io = req.app.get('io');
 
       await createNotification({
         user_id: recipientId,
         type: 'message_new',
-        title: `${sender?.full_name ?? 'Bir kullanıcı'} size mesaj gönderdi`,
+        title: `${sender?.full_name ?? 'Someone'} sent you a message`,
         body: req.body.content.slice(0, 100),
         ref_id: req.params.id,
+        io,
       });
 
       const message = await get(
@@ -377,12 +544,8 @@ router.post(
         [msgId]
       );
 
-      const io = req.app.get('io');
       if (io) {
         io.to(`conv:${req.params.id}`).emit('message:new', message);
-        const recipientId = conv.participant_a === req.user.id
-          ? conv.participant_b
-          : conv.participant_a;
         io.to(`user:${recipientId}`).emit('conversation:updated', {
           id: req.params.id,
           last_message: req.body.content.slice(0, 100),
@@ -438,22 +601,68 @@ async function finalizeTamamdirOrder(conversationId, serviceId) {
     [serviceId, buyerId, service.provider_id]
   );
 
-  if (order && order.status === 'pending') {
+  if (order && order.status !== 'completed') {
     await run(
-      "UPDATE orders SET status = 'accepted', updated_at = NOW() WHERE id = ?",
+      `UPDATE orders SET status = 'completed', completed_at = NOW(), updated_at = NOW()
+       WHERE id = ?`,
       [order.id]
     );
-  } else if (!order) {
-    const id = uuidv4();
-    await run(
-      `INSERT INTO orders (id, service_id, buyer_id, provider_id, status, price_at_order)
-       VALUES (?, ?, ?, ?, 'accepted', ?)`,
-      [id, serviceId, buyerId, service.provider_id, service.price]
-    );
-    order = await get('SELECT * FROM orders WHERE id = ?', [id]);
+    return get('SELECT * FROM orders WHERE id = ?', [order.id]);
   }
 
-  return order;
+  const id = uuidv4();
+  await run(
+    `INSERT INTO orders (id, service_id, buyer_id, provider_id, status, price_at_order, completed_at)
+     VALUES (?, ?, ?, ?, 'completed', ?, NOW())`,
+    [id, serviceId, buyerId, service.provider_id, service.price]
+  );
+  return get('SELECT * FROM orders WHERE id = ?', [id]);
+}
+
+async function getMyExistingReview(userId, buyerId, providerId, serviceId) {
+  const isCustomer = userId === buyerId;
+  if (isCustomer) {
+    const row = await get(
+      `SELECT id, rating, comment FROM reviews
+       WHERE service_id = ? AND reviewer_id = ?
+       ORDER BY created_at DESC LIMIT 1`,
+      [serviceId, userId]
+    );
+    return row ? { id: row.id, rating: row.rating, comment: row.comment ?? '' } : null;
+  }
+
+  const row = await get(
+    `SELECT ur.id, ur.rating, ur.comment FROM user_reviews ur
+     JOIN orders o ON o.id = ur.order_id
+     WHERE ur.reviewer_id = ? AND ur.reviewee_id = ? AND o.service_id = ?
+     ORDER BY ur.created_at DESC LIMIT 1`,
+    [userId, buyerId, serviceId]
+  );
+  return row ? { id: row.id, rating: row.rating, comment: row.comment ?? '' } : null;
+}
+
+async function getOrderReviewMeta(orderId, userId, buyerId, bothConfirmed) {
+  if (!bothConfirmed || !orderId) {
+    return {
+      my_review_submitted: false,
+      other_review_submitted: false,
+      can_leave_review: false,
+      both_reviews_submitted: false,
+    };
+  }
+
+  const serviceReview = await get('SELECT id FROM reviews WHERE order_id = ?', [orderId]);
+  const customerReview = await get('SELECT id FROM user_reviews WHERE order_id = ?', [orderId]);
+  const isCustomer = userId === buyerId;
+  const mySubmitted = isCustomer ? !!serviceReview : !!customerReview;
+  const otherSubmitted = isCustomer ? !!customerReview : !!serviceReview;
+
+  return {
+    my_review_submitted: mySubmitted,
+    other_review_submitted: otherSubmitted,
+    can_leave_review: !mySubmitted,
+    both_reviews_submitted: !!serviceReview && !!customerReview,
+  };
 }
 
 function emitTamamdirUpdate(req, conversationId, payload) {
@@ -624,9 +833,20 @@ async function clearCustomerBan(conversationId, serviceId) {
   );
 }
 
-function buildTamamdirPayload(base, arrangement, buyerId, providerId, userId) {
+async function buildTamamdirPayload(base, arrangement, buyerId, providerId, userId) {
   const meta = buildArrangementMeta(arrangement, buyerId, providerId, userId);
-  return { ...base, ...meta };
+  const reviewMeta = await getOrderReviewMeta(
+    base.order_id,
+    userId,
+    buyerId,
+    base.both_confirmed
+  );
+  const serviceId = base.service_id;
+  const myExistingReview =
+  base.both_confirmed && serviceId && !reviewMeta.my_review_submitted
+    ? await getMyExistingReview(userId, buyerId, providerId, serviceId)
+    : null;
+  return { ...base, ...meta, ...reviewMeta, my_existing_review: myExistingReview };
 }
 
 async function assertCustomerCanMessage(conv, userId) {
@@ -680,6 +900,13 @@ router.get('/conversations/:id/tamamdir', requireAuth, async (req, res, next) =>
     const conv = await get('SELECT * FROM conversations WHERE id = ?', [req.params.id]);
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
 
+    if (conv.service_id && conv.service_id !== service_id) {
+      return res.status(400).json({
+        error: 'service_id does not match this conversation',
+        expected_service_id: conv.service_id,
+      });
+    }
+
     const isParticipant =
       conv.participant_a === req.user.id || conv.participant_b === req.user.id;
     if (!isParticipant) return res.status(403).json({ error: 'Forbidden' });
@@ -692,7 +919,7 @@ router.get('/conversations/:id/tamamdir', requireAuth, async (req, res, next) =>
       'SELECT user_id FROM conversation_tamamdir WHERE conversation_id = ? AND service_id = ?',
       [req.params.id, service_id]
     );
-    const confirmedIds = confirms.map(c => c.user_id);
+    let confirmedIds = confirms.map(c => c.user_id);
 
     const service = await get(
       'SELECT id, provider_id, title FROM services WHERE id = ?',
@@ -704,7 +931,7 @@ router.get('/conversations/:id/tamamdir', requireAuth, async (req, res, next) =>
       ? conv.participant_b
       : conv.participant_a;
 
-    const order = await get(
+    let order = await get(
       `SELECT o.id, o.status
        FROM orders o
        WHERE o.service_id = ? AND o.buyer_id = ? AND o.provider_id = ?
@@ -713,12 +940,23 @@ router.get('/conversations/:id/tamamdir', requireAuth, async (req, res, next) =>
       [service_id, buyerId, service.provider_id]
     );
 
-    const bothConfirmed = confirmedIds.length >= 2;
+    let bothConfirmed = confirmedIds.length >= 2;
     const arrangement = await getArrangement(req.params.id, service_id);
 
-    return res.json(buildTamamdirPayload({
+    if (bothConfirmed && order?.status === 'accepted') {
+      await run(
+        `UPDATE orders SET status = 'completed', completed_at = NOW(), updated_at = NOW()
+         WHERE id = ?`,
+        [order.id]
+      );
+      order = await get('SELECT id, status FROM orders WHERE id = ?', [order.id]);
+    }
+
+    return res.json(await buildTamamdirPayload({
+      conversation_id: req.params.id,
       service_id,
       service_title: service?.title ?? null,
+      confirmed_user_ids: confirmedIds,
       my_confirmed: confirmedIds.includes(req.user.id),
       other_confirmed: confirmedIds.includes(otherId),
       both_confirmed: bothConfirmed,
@@ -743,6 +981,13 @@ router.post(
       const { service_id } = req.body;
       const conv = await get('SELECT * FROM conversations WHERE id = ?', [req.params.id]);
       if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+
+      if (conv.service_id && conv.service_id !== service_id) {
+        return res.status(400).json({
+          error: 'service_id does not match this conversation',
+          expected_service_id: conv.service_id,
+        });
+      }
 
       const isParticipant =
         conv.participant_a === req.user.id || conv.participant_b === req.user.id;
@@ -797,7 +1042,7 @@ router.post(
 
       const confirmedUserIds = confirms.map(c => c.user_id);
       const freshArrangement = await getArrangement(req.params.id, service_id);
-      const payload = buildTamamdirPayload({
+      const payload = await buildTamamdirPayload({
         conversation_id: req.params.id,
         service_id,
         service_title: service.title,
@@ -805,9 +1050,14 @@ router.post(
         both_confirmed: confirms.length >= 2,
         order_id: order?.id ?? null,
         order_status: order?.status ?? null,
+        my_confirmed: confirmedUserIds.includes(req.user.id),
+        other_confirmed: confirmedUserIds.includes(otherId),
       }, freshArrangement, buyerId, service.provider_id, req.user.id);
 
-      emitTamamdirUpdate(req, req.params.id, payload);
+      emitTamamdirUpdate(req, req.params.id, {
+        ...payload,
+        confirmed_user_ids: confirmedUserIds,
+      });
 
       return res.json({
         ...payload,
@@ -882,7 +1132,7 @@ router.post(
         req.user.id
       );
 
-      const payload = buildTamamdirPayload({
+      const payload = await buildTamamdirPayload({
         conversation_id: req.params.id,
         service_id,
         service_title: service.title,
@@ -932,7 +1182,7 @@ router.post(
       const buyerId = getBuyerId(conv, service.provider_id);
       const arrangement = await clearCustomerBan(req.params.id, service_id);
 
-      const payload = buildTamamdirPayload({
+      const payload = await buildTamamdirPayload({
         conversation_id: req.params.id,
         service_id,
         service_title: service.title,

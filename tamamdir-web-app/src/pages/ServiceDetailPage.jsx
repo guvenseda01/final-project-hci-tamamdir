@@ -76,11 +76,23 @@ export default function ServiceDetailPage() {
         ])
         const serviceOrder = orders.find(o => o.service_id === id)
         if (serviceOrder) {
+          const existing = convs.find(
+            c => c.service_id === id && c.other_id === serviceOrder.buyer_id
+          )
+          if (existing) {
+            navigate(`/messages?conv=${existing.id}&${serviceQuery}`)
+            return
+          }
           const conv = await api.post('/api/messages/conversations', {
             recipient_id: serviceOrder.buyer_id,
             service_id: id,
           })
           navigate(`/messages?conv=${conv.id}&${serviceQuery}`)
+          return
+        }
+        const existingForService = convs.find(c => c.service_id === id)
+        if (existingForService) {
+          navigate(`/messages?conv=${existingForService.id}&${serviceQuery}`)
           return
         }
         if (convs.length === 1) {
@@ -99,6 +111,15 @@ export default function ServiceDetailPage() {
     }
 
     try {
+      const convs = await api.get('/api/messages/conversations')
+      const existing = convs.find(
+        c => c.service_id === id && c.other_id === service.provider_id
+      )
+      if (existing) {
+        navigate(`/messages?conv=${existing.id}&${serviceQuery}`)
+        return
+      }
+
       const conv = await api.post('/api/messages/conversations', {
         recipient_id: service.provider_id,
         service_id: id,
