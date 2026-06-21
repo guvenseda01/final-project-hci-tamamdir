@@ -66,7 +66,7 @@ function App() {
     <AuthProvider>
       <PreferencesProvider>
         <ServicesProvider>
-          <BrowserRouter>
+          <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/mobile'}>
             <AppRoutes />
           </BrowserRouter>
         </ServicesProvider>
