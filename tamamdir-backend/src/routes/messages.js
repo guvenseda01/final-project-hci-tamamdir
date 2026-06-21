@@ -155,6 +155,7 @@ const { v4: uuidv4 } = require('uuid');
 const { run, get, all } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { createNotification } = require('../utils/notifications');
+const { isBlockedBetween, getBlockedUserIds } = require('../utils/blocks');
 
 async function getConversationForUser(convId, userId) {
   const conv = await get('SELECT * FROM conversations WHERE id = ?', [convId]);
@@ -344,7 +345,12 @@ router.get('/conversations', requireAuth, async (req, res, next) => {
        ORDER BY c.last_msg_at DESC NULLS LAST, c.created_at DESC`,
       params
     );
-    return res.json(convs.map(row => mapConversationRow(row, req.user.id)));
+    const blockedIds = await getBlockedUserIds(req.user.id);
+    const visible = convs.filter((c) => {
+      const otherId = c.participant_a === req.user.id ? c.participant_b : c.participant_a;
+      return !blockedIds.has(otherId);
+    });
+    return res.json(visible.map(row => mapConversationRow(row, req.user.id)));
   } catch (err) {
     next(err);
   }
@@ -368,6 +374,10 @@ router.post(
 
       const recipient = await get('SELECT id FROM users WHERE id = ?', [recipient_id]);
       if (!recipient) return res.status(404).json({ error: 'Recipient not found' });
+
+      if (await isBlockedBetween(req.user.id, recipient_id)) {
+        return res.status(403).json({ error: 'You cannot message this user' });
+      }
 
       const conv = await findOrCreateConversation(req.user.id, recipient_id, service_id);
       const enriched = await get(
@@ -501,6 +511,11 @@ router.post(
 
       const isParticipant = conv.participant_a === req.user.id || conv.participant_b === req.user.id;
       if (!isParticipant) return res.status(403).json({ error: 'Forbidden' });
+
+      const otherId = conv.participant_a === req.user.id ? conv.participant_b : conv.participant_a;
+      if (await isBlockedBetween(req.user.id, otherId)) {
+        return res.status(403).json({ error: 'You cannot message this user' });
+      }
 
       try {
         await assertCustomerCanMessage(conv, req.user.id);
@@ -875,11 +890,17 @@ async function assertCustomerCanMessage(conv, userId) {
   const serviceId = conv.service_id;
   if (!serviceId) return;
 
-  const service = await get('SELECT id, provider_id FROM services WHERE id = ?', [serviceId]);
+  const service = await get('SELECT id, provider_id, is_active FROM services WHERE id = ?', [serviceId]);
   if (!service) return;
 
   const buyerId = getBuyerId(conv, service.provider_id);
   if (userId !== buyerId) return;
+
+  if (!service.is_active) {
+    const err = new Error('This service is not active at the moment');
+    err.status = 403;
+    throw err;
+  }
 
   const arrangement = await getArrangement(conv.id, serviceId);
   const meta = buildArrangementMeta(arrangement, buyerId, service.provider_id, userId);

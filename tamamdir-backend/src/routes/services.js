@@ -264,13 +264,17 @@ const { run, get, all } = require('../config/database');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { serviceImageUpload } = require('../middleware/upload');
 
+const { LOCATION_TYPES } = require('../constants/locations');
+
+
 // ── GET /api/services ───────────────────────────────────────────────────────
 router.get('/', optionalAuth, async (req, res, next) => {
   try {
     const {
       q,            // free-text search
       category,     // category slug or id
-      location,     // on_campus | near_campus | remote
+      location_type: locationTypeFilter, // preferred query param
+      location,     // legacy alias
       interests,    // "1" or "true" — filter to authenticated user's interest categories
       min_price,
       max_price,
@@ -293,10 +297,14 @@ router.get('/', optionalAuth, async (req, res, next) => {
       params.push(category, category);
     }
 
-    const VALID_LOCATIONS = ['on_campus', 'near_campus', 'remote'];
-    if (location && VALID_LOCATIONS.includes(location)) {
-      where.push('s.location_type = ?');
-      params.push(location);
+    const locationFilter = locationTypeFilter || location;
+    if (locationFilter) {
+      if (LOCATION_TYPES.includes(locationFilter)) {
+        where.push('s.location_type = ?');
+        params.push(locationFilter);
+      } else {
+        where.push('1 = 0');
+      }
     }
 
     if (interests === '1' || interests === 'true') {
@@ -397,7 +405,7 @@ router.post(
     body('price').isFloat({ min: 1 }),
     body('price_unit').optional().isIn(['session', 'hour', 'item', 'day', 'piece']),
     body('delivery_days').optional().isInt({ min: 1, max: 90 }),
-    body('location_type').optional().isIn(['on_campus', 'near_campus', 'remote']),
+    body('location_type').optional().isIn(LOCATION_TYPES),
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -457,7 +465,7 @@ router.patch(
     body('price').optional().toFloat().isFloat({ min: 1 }),
     body('price_unit').optional().isIn(['session', 'hour', 'item', 'day', 'piece']),
     body('delivery_days').optional().toInt().isInt({ min: 1, max: 90 }),
-    body('location_type').optional().isIn(['on_campus', 'near_campus', 'remote']),
+    body('location_type').optional().isIn(LOCATION_TYPES),
     body('is_active').optional().custom((v) => v === true || v === false || v === 0 || v === 1),
   ],
   async (req, res, next) => {

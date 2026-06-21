@@ -212,6 +212,51 @@ const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { avatarUpload } = require('../middleware/upload');
 const { sanitizeUser } = require('../utils/user');
 
+// ── POST /api/users/:id/block ───────────────────────────────────────────────
+router.post('/:id/block', requireAuth, async (req, res, next) => {
+  try {
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ error: 'You cannot block yourself' });
+    }
+    const target = await get('SELECT id FROM users WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+
+    await run(
+      'INSERT INTO user_blocks (blocker_id, blocked_id) VALUES (?, ?) ON CONFLICT DO NOTHING',
+      [req.user.id, req.params.id]
+    );
+    return res.status(201).json({ blocked: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── DELETE /api/users/:id/block ─────────────────────────────────────────────
+router.delete('/:id/block', requireAuth, async (req, res, next) => {
+  try {
+    await run(
+      'DELETE FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?',
+      [req.user.id, req.params.id]
+    );
+    return res.json({ blocked: false });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── GET /api/users/:id/block-status ─────────────────────────────────────────
+router.get('/:id/block-status', requireAuth, async (req, res, next) => {
+  try {
+    const row = await get(
+      'SELECT 1 AS ok FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?',
+      [req.user.id, req.params.id]
+    );
+    return res.json({ blocked: !!row });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ── GET /api/users/:id ──────────────────────────────────────────────────────
 router.get('/:id', async (req, res, next) => {
   try {
