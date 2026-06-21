@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import ProfileMenuDropdown from "./ProfileMenuDropdown";
 import NotificationsDropdown from "./NotificationsDropdown";
+import HeaderActionButtons from "./HeaderActionButtons";
 
 interface TopBarProps {
   showBack?: boolean;
