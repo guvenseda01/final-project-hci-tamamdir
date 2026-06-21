@@ -361,7 +361,7 @@ router.post(
         return res.status(400).json({ error: 'Invalid verification code' });
       }
 
-      await run("UPDATE users SET is_verified = 1, updated_at = datetime('now') WHERE id = ?", [user.id]);
+      await run('UPDATE users SET is_verified = 1, updated_at = NOW() WHERE id = ?', [user.id]);
       await run('DELETE FROM email_verifications WHERE user_id = ?', [user.id]);
 
       const updated = await get('SELECT * FROM users WHERE id = ?', [user.id]);
@@ -427,23 +427,6 @@ router.get('/me', requireAuth, async (req, res, next) => {
   }
 });
 
-// ── POST /api/auth/verify-password ─────────────────────────────────────────
-router.post('/verify-password', requireAuth, [
-  body('password').notEmpty().withMessage('Password is required'),
-], async (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
-  try {
-    const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const valid = await bcrypt.compare(req.body.password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: 'Password is incorrect' });
-    return res.json({ valid: true });
-  } catch (err) {
-    next(err);
-  }
-});
-
 // ── PATCH /api/auth/password ────────────────────────────────────────────────
 router.patch(
   '/password',
@@ -464,7 +447,7 @@ router.patch(
       if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
 
       const passwordHash = await bcrypt.hash(req.body.new_password, 12);
-      await run("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?", [
+      await run('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?', [
         passwordHash,
         req.user.id,
       ]);
@@ -483,9 +466,9 @@ router.post('/deactivate', requireAuth, async (req, res, next) => {
     if (!user || user.deleted_at) return res.status(404).json({ error: 'User not found' });
     if (!user.is_active) return res.status(400).json({ error: 'Account is already deactivated' });
 
-    await run("UPDATE users SET is_active = 0, updated_at = datetime('now') WHERE id = ?", [req.user.id]);
+    await run('UPDATE users SET is_active = 0, updated_at = NOW() WHERE id = ?', [req.user.id]);
     await run(
-      "UPDATE services SET is_active = 0, updated_at = datetime('now') WHERE provider_id = ? AND is_active = 1",
+      'UPDATE services SET is_active = 0, updated_at = NOW() WHERE provider_id = ? AND is_active = 1',
       [req.user.id]
     );
 
@@ -503,9 +486,9 @@ router.post('/reactivate', requireAuth, async (req, res, next) => {
     if (!user || user.deleted_at) return res.status(404).json({ error: 'User not found' });
     if (user.is_active) return res.status(400).json({ error: 'Account is already active' });
 
-    await run("UPDATE users SET is_active = 1, updated_at = datetime('now') WHERE id = ?", [req.user.id]);
+    await run('UPDATE users SET is_active = 1, updated_at = NOW() WHERE id = ?', [req.user.id]);
     await run(
-      "UPDATE services SET is_active = 1, updated_at = datetime('now') WHERE provider_id = ?",
+      'UPDATE services SET is_active = 1, updated_at = NOW() WHERE provider_id = ?',
       [req.user.id]
     );
 
@@ -523,11 +506,11 @@ router.delete('/account', requireAuth, async (req, res, next) => {
     if (!user || user.deleted_at) return res.status(404).json({ error: 'User not found' });
 
     await run(
-      "UPDATE users SET is_active = 0, deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+      'UPDATE users SET is_active = 0, deleted_at = NOW(), updated_at = NOW() WHERE id = ?',
       [req.user.id]
     );
     await run(
-      "UPDATE services SET is_active = 0, updated_at = datetime('now') WHERE provider_id = ?",
+      'UPDATE services SET is_active = 0, updated_at = NOW() WHERE provider_id = ?',
       [req.user.id]
     );
 

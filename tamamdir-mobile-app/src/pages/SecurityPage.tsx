@@ -1,7 +1,6 @@
 import { useState } from "react";
 import TopBar from "../components/TopBar";
 import Toast from "../components/Toast";
-import api from "../lib/api";
 
 type Device = { id: string; name: string; os: string; lastSeen: string; current: boolean };
 
@@ -15,25 +14,11 @@ export default function SecurityPage() {
   const [toastMessage, setToastMessage] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
 
-  // Password change
   const [showPasswordForm, setShowPasswordForm] = useState(false);
-  // step 0 = verify current password, step 1 = enter new password
-  const [pwStep, setPwStep] = useState<0 | 1>(0);
+  const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
+  const [passwordErrors, setPasswordErrors] = useState({ current: "", next: "", confirm: "" });
+  const [showPasswords, setShowPasswords] = useState({ current: false, next: false, confirm: false });
 
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [currentPasswordError, setCurrentPasswordError] = useState("");
-  const [showCurrentPw, setShowCurrentPw] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [newPasswordError, setNewPasswordError] = useState("");
-  const [confirmPasswordError, setConfirmPasswordError] = useState("");
-  const [showNewPw, setShowNewPw] = useState(false);
-  const [showConfirmPw, setShowConfirmPw] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  // 2FA
   const [twoFaEnabled, setTwoFaEnabled] = useState(false);
   const [showTwoFaSetup, setShowTwoFaSetup] = useState(false);
   const [twoFaCode, setTwoFaCode] = useState("");
@@ -46,66 +31,16 @@ export default function SecurityPage() {
     setToastVisible(true);
   }
 
-  function resetPasswordForm() {
+  function handlePasswordSave() {
+    const errs = { current: "", next: "", confirm: "" };
+    if (!passwords.current) errs.current = "Mevcut şifrenizi girin.";
+    if (passwords.next.length < 8) errs.next = "Şifre en az 8 karakter olmalı.";
+    if (passwords.next !== passwords.confirm) errs.confirm = "Şifreler eşleşmiyor.";
+    setPasswordErrors(errs);
+    if (errs.current || errs.next || errs.confirm) return;
+    setPasswords({ current: "", next: "", confirm: "" });
     setShowPasswordForm(false);
-    setPwStep(0);
-    setCurrentPassword("");
-    setCurrentPasswordError("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setNewPasswordError("");
-    setConfirmPasswordError("");
-    setShowCurrentPw(false);
-    setShowNewPw(false);
-    setShowConfirmPw(false);
-  }
-
-  async function handleVerifyCurrentPassword() {
-    if (!currentPassword) {
-      setCurrentPasswordError("Mevcut şifrenizi girin.");
-      return;
-    }
-    setCurrentPasswordError("");
-    setVerifying(true);
-    try {
-      await api.post("/api/auth/verify-password", { password: currentPassword });
-      setPwStep(1);
-    } catch {
-      setCurrentPasswordError("Şifreniz yanlış, tekrar deneyin.");
-    } finally {
-      setVerifying(false);
-    }
-  }
-
-  async function handlePasswordSave() {
-    let hasError = false;
-    if (newPassword.length < 8) {
-      setNewPasswordError("Şifre en az 8 karakter olmalı.");
-      hasError = true;
-    } else {
-      setNewPasswordError("");
-    }
-    if (newPassword !== confirmPassword) {
-      setConfirmPasswordError("Şifreler eşleşmiyor.");
-      hasError = true;
-    } else {
-      setConfirmPasswordError("");
-    }
-    if (hasError) return;
-
-    setSaving(true);
-    try {
-      await api.patch("/api/auth/password", {
-        current_password: currentPassword,
-        new_password: newPassword,
-      });
-      resetPasswordForm();
-      showToast("Şifreniz başarıyla değiştirildi!");
-    } catch {
-      showToast("Şifre güncellenemedi, tekrar deneyin.");
-    } finally {
-      setSaving(false);
-    }
+    showToast("Şifreniz başarıyla değiştirildi!");
   }
 
   function handleTwoFaToggle() {
@@ -144,13 +79,7 @@ export default function SecurityPage() {
         {/* Password Change */}
         <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 overflow-hidden">
           <button
-            onClick={() => {
-              if (showPasswordForm) {
-                resetPasswordForm();
-              } else {
-                setShowPasswordForm(true);
-              }
-            }}
+            onClick={() => { setShowPasswordForm((v) => !v); setPasswordErrors({ current: "", next: "", confirm: "" }); }}
             className="w-full flex items-center justify-between px-5 py-4 active:bg-surface-container-low transition-colors"
           >
             <div className="flex items-center gap-3">
@@ -162,144 +91,52 @@ export default function SecurityPage() {
                 <p className="text-[11px] text-secondary">Hesap şifrenizi güncelleyin</p>
               </div>
             </div>
-            <span className={`material-symbols-outlined text-outline transition-transform duration-200 ${showPasswordForm ? "rotate-180" : ""}`}>
-              expand_more
-            </span>
+            <span className={`material-symbols-outlined text-outline transition-transform duration-200 ${showPasswordForm ? "rotate-180" : ""}`}>expand_more</span>
           </button>
 
           {showPasswordForm && (
             <div className="px-5 pb-5 space-y-3 border-t border-outline-variant/10">
               <div className="pt-3" />
-
-              {/* Step indicator */}
-              <div className="flex items-center gap-2 mb-1">
-                <div className={`flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold ${pwStep >= 0 ? "bg-primary text-on-primary" : "bg-surface-container-high text-secondary"}`}>1</div>
-                <div className={`flex-1 h-0.5 rounded ${pwStep >= 1 ? "bg-primary" : "bg-surface-container-high"}`} />
-                <div className={`flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold ${pwStep >= 1 ? "bg-primary text-on-primary" : "bg-surface-container-high text-secondary"}`}>2</div>
-              </div>
-
-              {pwStep === 0 ? (
-                /* Step 0: Verify current password */
-                <>
-                  <p className="text-xs text-secondary font-bold">Mevcut şifrenizi doğrulayın</p>
-                  <div className="flex flex-col gap-1">
-                    <label className="font-bold text-xs text-on-surface-variant">Mevcut Şifre</label>
+              {(["current", "next", "confirm"] as const).map((key) => {
+                const labels = { current: "Mevcut Şifre", next: "Yeni Şifre", confirm: "Yeni Şifre Tekrar" };
+                return (
+                  <div key={key} className="flex flex-col gap-1">
+                    <label className="font-bold text-xs text-on-surface-variant">{labels[key]}</label>
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">lock</span>
                       <input
-                        type={showCurrentPw ? "text" : "password"}
-                        value={currentPassword}
-                        onChange={(e) => { setCurrentPassword(e.target.value); setCurrentPasswordError(""); }}
-                        onKeyDown={(e) => e.key === "Enter" && handleVerifyCurrentPassword()}
-                        placeholder="••••••••"
-                        autoFocus
-                        className={`w-full h-12 pl-10 pr-10 rounded-xl border bg-surface-container-low outline-none text-sm transition-all ${
-                          currentPasswordError
-                            ? "border-error focus:border-error focus:ring-1 focus:ring-error"
-                            : "border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary"
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowCurrentPw((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-outline"
-                      >
-                        <span className="material-symbols-outlined text-sm">{showCurrentPw ? "visibility_off" : "visibility"}</span>
-                      </button>
-                    </div>
-                    {currentPasswordError && <p className="text-error text-xs">{currentPasswordError}</p>}
-                  </div>
-                  <button
-                    onClick={handleVerifyCurrentPassword}
-                    disabled={verifying}
-                    className="w-full h-11 bg-primary text-on-primary rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-60"
-                  >
-                    {verifying ? (
-                      <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                    )}
-                    {verifying ? "Doğrulanıyor..." : "Devam Et"}
-                  </button>
-                </>
-              ) : (
-                /* Step 1: Enter new password */
-                <>
-                  <p className="text-xs text-secondary font-bold">Yeni şifrenizi belirleyin</p>
-                  <div className="flex flex-col gap-1">
-                    <label className="font-bold text-xs text-on-surface-variant">Yeni Şifre</label>
-                    <div className="relative">
-                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">lock_reset</span>
-                      <input
-                        type={showNewPw ? "text" : "password"}
-                        value={newPassword}
-                        onChange={(e) => { setNewPassword(e.target.value); setNewPasswordError(""); }}
-                        placeholder="En az 8 karakter"
-                        autoFocus
-                        className={`w-full h-12 pl-10 pr-10 rounded-xl border bg-surface-container-low outline-none text-sm transition-all ${
-                          newPasswordError
-                            ? "border-error focus:border-error focus:ring-1 focus:ring-error"
-                            : "border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary"
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowNewPw((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-outline"
-                      >
-                        <span className="material-symbols-outlined text-sm">{showNewPw ? "visibility_off" : "visibility"}</span>
-                      </button>
-                    </div>
-                    {newPasswordError && <p className="text-error text-xs">{newPasswordError}</p>}
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="font-bold text-xs text-on-surface-variant">Yeni Şifre Tekrar</label>
-                    <div className="relative">
-                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">lock</span>
-                      <input
-                        type={showConfirmPw ? "text" : "password"}
-                        value={confirmPassword}
-                        onChange={(e) => { setConfirmPassword(e.target.value); setConfirmPasswordError(""); }}
-                        onKeyDown={(e) => e.key === "Enter" && handlePasswordSave()}
+                        type={showPasswords[key] ? "text" : "password"}
+                        value={passwords[key]}
+                        onChange={(e) => {
+                          setPasswords((p) => ({ ...p, [key]: e.target.value }));
+                          setPasswordErrors((p) => ({ ...p, [key]: "" }));
+                        }}
                         placeholder="••••••••"
                         className={`w-full h-12 pl-10 pr-10 rounded-xl border bg-surface-container-low outline-none text-sm transition-all ${
-                          confirmPasswordError
+                          passwordErrors[key]
                             ? "border-error focus:border-error focus:ring-1 focus:ring-error"
                             : "border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary"
                         }`}
                       />
                       <button
                         type="button"
-                        onClick={() => setShowConfirmPw((v) => !v)}
+                        onClick={() => setShowPasswords((p) => ({ ...p, [key]: !p[key] }))}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-outline"
                       >
-                        <span className="material-symbols-outlined text-sm">{showConfirmPw ? "visibility_off" : "visibility"}</span>
+                        <span className="material-symbols-outlined text-sm">{showPasswords[key] ? "visibility_off" : "visibility"}</span>
                       </button>
                     </div>
-                    {confirmPasswordError && <p className="text-error text-xs">{confirmPasswordError}</p>}
+                    {passwordErrors[key] && <p className="text-error text-xs">{passwordErrors[key]}</p>}
                   </div>
-                  <div className="flex gap-2 mt-1">
-                    <button
-                      onClick={() => { setPwStep(0); setNewPassword(""); setConfirmPassword(""); setNewPasswordError(""); setConfirmPasswordError(""); }}
-                      className="flex-1 h-11 border border-outline-variant text-on-surface rounded-xl font-bold text-sm active:scale-[0.98] transition-all"
-                    >
-                      Geri
-                    </button>
-                    <button
-                      onClick={handlePasswordSave}
-                      disabled={saving}
-                      className="flex-1 h-11 bg-primary text-on-primary rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-60"
-                    >
-                      {saving ? (
-                        <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <span className="material-symbols-outlined fill-icon text-sm">check_circle</span>
-                      )}
-                      {saving ? "Kaydediliyor..." : "Şifreyi Güncelle"}
-                    </button>
-                  </div>
-                </>
-              )}
+                );
+              })}
+              <button
+                onClick={handlePasswordSave}
+                className="w-full h-11 bg-primary text-on-primary rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all mt-1"
+              >
+                <span className="material-symbols-outlined fill-icon text-sm">check_circle</span>
+                Şifreyi Güncelle
+              </button>
             </div>
           )}
         </div>
