@@ -62,6 +62,30 @@ async function sendVerificationEmail(email, code) {
   return sendViaResend({ to: email, subject, html, text });
 }
 
+/**
+ * Send 6-digit password reset code (Resend REST API via fetch).
+ */
+async function sendPasswordResetEmail(email, code) {
+  const subject = 'Tamamdır şifre sıfırlama kodu';
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px;">
+      <h2 style="color: #111;">Tamamdır</h2>
+      <p>Şifrenizi sıfırlamak için doğrulama kodunuz:</p>
+      <p style="font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #16a34a;">${code}</p>
+      <p style="color: #666; font-size: 14px;">Bu kod 15 dakika geçerlidir. Bu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz.</p>
+    </div>
+  `;
+  const text = `Tamamdır şifre sıfırlama kodunuz: ${code}\n\nBu kod 15 dakika geçerlidir.`;
+
+  if (!process.env.RESEND_API_KEY) {
+    console.log(`[email] DEV — password reset code for ${email}: ${code}`);
+    return { success: true, dev: true };
+  }
+
+  return sendViaResend({ to: email, subject, html, text });
+}
+
 module.exports = {
   sendVerificationEmail,
+  sendPasswordResetEmail,
 };

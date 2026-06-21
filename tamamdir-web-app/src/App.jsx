@@ -16,6 +16,8 @@ import UserProfilePage from './pages/UserProfilePage'
 import AdminReportsPage from './pages/AdminReportsPage'
 import FavoritesPage from './pages/FavoritesPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import RegisterWelcomePage from './pages/RegisterWelcomePage'
 
 function postAuthPath(user) {
@@ -55,6 +57,8 @@ export default function App() {
           <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
           <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/register/welcome" element={<ProtectedRoute skipInterestCheck><RegisterWelcomePage /></ProtectedRoute>} />
           <Route element={<AppLayout />}>
             <Route path="/" element={<Navigate to="/login" replace />} />
