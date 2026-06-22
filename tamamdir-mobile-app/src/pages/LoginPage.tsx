@@ -71,7 +71,7 @@ export default function LoginPage() {
       <main className="w-full px-margin-mobile py-lg flex flex-col gap-xl flex-grow">
         <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-card bg-surface-container-lowest">
           <img
-            src="https://picsum.photos/seed/campus-login/500/500"
+            src="/campus.jpg"
             alt="Campus"
             className="w-full h-full object-cover"
           />
