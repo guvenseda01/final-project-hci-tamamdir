@@ -342,7 +342,12 @@ async function initDB() {
     );
   }
 
-  console.log(`📦  PostgreSQL connected: ${process.env.DATABASE_URL}`);
+  // Log only the host, never the full connection string (it contains the password).
+  let dbHost = 'unknown host';
+  try {
+    dbHost = new URL(process.env.DATABASE_URL).host;
+  } catch (_) { /* ignore malformed/missing URL */ }
+  console.log(`📦  PostgreSQL connected: ${dbHost}`);
 }
 
 module.exports = { initDB, run, get, all };
