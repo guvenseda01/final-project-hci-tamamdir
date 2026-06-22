@@ -1,16 +1,16 @@
 {
-  "_note": "Her satıra seed-assets/ içindeki dosya adını yaz. Boş bırakırsan slug.jpg / slug.png otomatik aranır (ör. tennis-coaching.jpg). Tam URL de verebilirsin (https://...).",
+  "_note": "Tam URL kullanılırsa fotoğraflar production'da da görünür. Dosya adı veya https://...",
 
-  "tennis-coaching": "",
-  "coding-lessons": "",
-  "custom-knitting": "",
-  "calculus-tutoring": "",
-  "photography": "",
-  "instrument-lessons": "",
-  "graphic-design": "",
-  "language-exchange": "",
-  "handmade-goods": "",
-  "pet-sitting": "",
+  "tennis-coaching": "https://raw.githubusercontent.com/guvenseda01/final-project-HCI/dev/tamamdir-backend/seed-assets/tennis-coaching.jpg",
+  "coding-lessons": "https://raw.githubusercontent.com/guvenseda01/final-project-HCI/dev/tamamdir-backend/seed-assets/coding-lessons.jpg",
+  "custom-knitting": "https://raw.githubusercontent.com/guvenseda01/final-project-HCI/dev/tamamdir-backend/seed-assets/custom-knitting.jpg",
+  "calculus-tutoring": "https://raw.githubusercontent.com/guvenseda01/final-project-HCI/dev/tamamdir-backend/seed-assets/calculus-tutoring.jpg",
+  "photography": "https://raw.githubusercontent.com/guvenseda01/final-project-HCI/dev/tamamdir-backend/seed-assets/photography.jpg",
+  "instrument-lessons": "https://raw.githubusercontent.com/guvenseda01/final-project-HCI/dev/tamamdir-backend/seed-assets/instrument-lessons.jpg",
+  "graphic-design": "https://raw.githubusercontent.com/guvenseda01/final-project-HCI/dev/tamamdir-backend/seed-assets/graphic-design.jpg",
+  "language-exchange": "https://raw.githubusercontent.com/guvenseda01/final-project-HCI/dev/tamamdir-backend/seed-assets/language-exchange.jpg",
+  "handmade-goods": "https://raw.githubusercontent.com/guvenseda01/final-project-HCI/dev/tamamdir-backend/seed-assets/handmade-goods.jpg",
+  "pet-sitting": "https://raw.githubusercontent.com/guvenseda01/final-project-HCI/dev/tamamdir-backend/seed-assets/pet-sitting.jpg",
   "house-cleaning": "",
   "nail-art": ""
 }

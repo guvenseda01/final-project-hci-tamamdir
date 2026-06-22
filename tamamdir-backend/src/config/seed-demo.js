@@ -93,8 +93,24 @@ async function main() {
       console.log('ℹ️  Demo data already present. Run with --force to re-seed.');
       process.exit(0);
     }
-    // --force: wipe everything except categories
-    for (const t of ['reviews','orders','messages','conversations','user_interests','service_images','services','users']) {
+    // --force: wipe everything except categories (child tables first)
+    for (const t of [
+      'user_reviews',
+      'reviews',
+      'conversation_tamamdir',
+      'conversation_service_arrangements',
+      'messages',
+      'orders',
+      'conversations',
+      'notifications',
+      'service_favorites',
+      'reports',
+      'user_blocks',
+      'user_interests',
+      'service_images',
+      'services',
+      'users',
+    ]) {
       await run(`DELETE FROM ${t}`);
     }
     console.log('⚠️  Cleared existing data (categories kept).');
