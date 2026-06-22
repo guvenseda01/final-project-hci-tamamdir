@@ -18,7 +18,7 @@ export default function HomePage() {
         <section className="relative w-full h-[360px] overflow-hidden">
           <div
             className="absolute inset-0 bg-cover bg-center z-0"
-            style={{ backgroundImage: "url('https://picsum.photos/seed/iyte-campus/800/500')" }}
+            style={{ backgroundImage: "url('/campus.jpg')" }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/85 via-emerald-950/40 to-transparent z-10" />
           <div className="relative z-20 h-full flex flex-col justify-end p-8">
