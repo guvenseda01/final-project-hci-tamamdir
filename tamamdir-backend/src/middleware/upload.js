@@ -1,10 +1,19 @@
 const multer = require('multer');
 const path   = require('path');
+const fs     = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
 function makeStorage(subfolder) {
+  const dest = path.resolve(__dirname, `../../uploads/${subfolder}`);
+
+  // Ensure the destination directory exists. This matters when the
+  // "uploads" folder lives on a freshly attached Railway Volume, which
+  // starts out completely empty — multer's diskStorage will not create
+  // missing directories on its own and will throw ENOENT otherwise.
+  fs.mkdirSync(dest, { recursive: true });
+
   return multer.diskStorage({
-    destination: path.resolve(__dirname, `../../uploads/${subfolder}`),
+    destination: dest,
     filename: (_req, file, cb) => {
       const ext = path.extname(file.originalname).toLowerCase();
       cb(null, `${uuidv4()}${ext}`);
