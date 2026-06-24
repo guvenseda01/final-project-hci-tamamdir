@@ -208,19 +208,23 @@ const { body, param, validationResult } = require('express-validator');
 const { v4: uuidv4 } = require('uuid');
 
 const { run, get, all } = require('../config/database');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, optionalAuth } = require('../middleware/auth');
 const { avatarUpload } = require('../middleware/upload');
+const { sanitizeUser } = require('../utils/user');
 
 // ── GET /api/users/:id ──────────────────────────────────────────────────────
 router.get('/:id', async (req, res, next) => {
   try {
     const user = await get(
       `SELECT id, full_name, avatar_url, bio, department, year,
-              is_verified, is_provider, rating, review_count, created_at
+              is_verified, is_verified_student, is_provider, rating, review_count, created_at,
+              is_active, deleted_at
        FROM users WHERE id = ?`,
       [req.params.id]
     );
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user || user.deleted_at || !user.is_active) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     const interests = await all(
       `SELECT c.id, c.name, c.icon, c.slug
@@ -229,7 +233,7 @@ router.get('/:id', async (req, res, next) => {
       [user.id]
     );
 
-    return res.json({ ...user, interests });
+    return res.json({ ...sanitizeUser(user), interests });
   } catch (err) {
     next(err);
   }
@@ -266,7 +270,7 @@ router.patch(
 
       if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
-      updates.push("updated_at = NOW()");
+      updates.push("updated_at = datetime('now')");
       values.push(req.params.id);
 
       await run(
@@ -276,11 +280,11 @@ router.patch(
 
       const updated = await get(
         `SELECT id, full_name, avatar_url, bio, department, year,
-                is_verified, is_provider, rating, review_count, wallet_balance, total_earnings
+                is_verified, is_verified_student, is_provider, rating, review_count, wallet_balance, total_earnings
          FROM users WHERE id = ?`,
         [req.params.id]
       );
-      return res.json(updated);
+      return res.json(sanitizeUser(updated));
     } catch (err) {
       next(err);
     }
@@ -335,7 +339,7 @@ router.put('/:id/interests', requireAuth, async (req, res, next) => {
     await run('DELETE FROM user_interests WHERE user_id = ?', [req.params.id]);
     for (const cid of category_ids) {
       await run(
-        'INSERT INTO user_interests (user_id, category_id) VALUES (?, ?) ON CONFLICT DO NOTHING',
+        'INSERT OR IGNORE INTO user_interests (user_id, category_id) VALUES (?, ?)',
         [req.params.id, cid]
       );
     }
@@ -353,17 +357,25 @@ router.put('/:id/interests', requireAuth, async (req, res, next) => {
 });
 
 // ── GET /api/users/:id/services ─────────────────────────────────────────────
-router.get('/:id/services', async (req, res, next) => {
+router.get('/:id/services', optionalAuth, async (req, res, next) => {
   try {
+    const includeInactive = req.query.all === '1';
+    if (includeInactive && req.user?.id !== req.params.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const where = includeInactive
+      ? 's.provider_id = ?'
+      : 's.provider_id = ? AND s.is_active = 1';
+
     const services = await all(
       `SELECT s.*, c.name AS category_name, c.slug AS category_slug
        FROM services s JOIN categories c ON c.id = s.category_id
-       WHERE s.provider_id = ? AND s.is_active = 1
+       WHERE ${where}
        ORDER BY s.created_at DESC`,
       [req.params.id]
     );
 
-    // Attach cover image
     for (const svc of services) {
       const img = await get(
         'SELECT image_url FROM service_images WHERE service_id = ? AND is_cover = 1 LIMIT 1',

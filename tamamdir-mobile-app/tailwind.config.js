@@ -5,6 +5,7 @@ export default {
     extend: {
       colors: {
         "primary": "#006c49",
+        "emerald-brand": "#006c49",
         "on-primary": "#ffffff",
         "primary-container": "#10b981",
         "on-primary-container": "#00422b",

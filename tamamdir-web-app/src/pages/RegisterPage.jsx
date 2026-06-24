@@ -18,13 +18,19 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!form.name.trim()) { setError('Full name is required.'); return }
     if (form.password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (form.password !== form.confirm) { setError("Passwords don't match."); return }
     setError('')
     setSubmitting(true)
     try {
-      const data = await register(form.name, form.email, form.password)
-      navigate(data.needs_interests ? '/onboarding' : '/home')
+      const data = await register(form.name.trim(), form.email.trim(), form.password)
+      navigate('/verify-email', {
+        state: {
+          email: data.email,
+          expiresInMinutes: data.expires_in_minutes,
+        },
+      })
     } catch (err) {
       const apiErrors = err.data?.errors
       setError(apiErrors ? apiErrors[0].msg : (err.message || 'Registration failed.'))
@@ -119,7 +125,7 @@ export default function RegisterPage() {
                   <input
                     name="email"
                     type="email"
-                    placeholder="your@iyte.edu.tr"
+                    placeholder="you@example.com"
                     value={form.email}
                     onChange={handleChange}
                     className={`input-field pr-10 ${isIyte ? 'border-green-primary ring-2 ring-green-primary/20' : ''}`}
@@ -134,15 +140,15 @@ export default function RegisterPage() {
                   <div className="flex items-center gap-1.5 mt-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-green-primary" />
                     <p className="text-xs text-green-primary font-medium">
-                      IYTE email detected — you'll receive a Verified Student badge!
+                      IYTE email detected — after email verification you&apos;ll get the Verified Student badge.
                     </p>
                   </div>
-                ) : (
+                ) : form.email ? (
                   <div className="flex items-center gap-1.5 mt-1.5">
                     <Info className="w-3.5 h-3.5 text-gray-400" />
-                    <p className="text-xs text-gray-400">Only IYTE emails are accepted for verification.</p>
+                    <p className="text-xs text-gray-400">We&apos;ll send a verification code to your email.</p>
                   </div>
-                )}
+                ) : null}
               </div>
 
               <div>

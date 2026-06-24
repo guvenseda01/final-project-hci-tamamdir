@@ -62,8 +62,8 @@ async function main() {
     uid[u.email] = id;
     const isProvider = providerDefs.some(p => p.email === u.email) ? 1 : 0;
     await run(
-      `INSERT INTO users (id, full_name, email, password_hash, bio, department, year, is_verified, is_provider)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+      `INSERT INTO users (id, full_name, email, password_hash, bio, department, year, is_verified, is_verified_student, is_provider)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?)`,
       [id, u.full_name, u.email, hash, u.bio, u.dept, u.year, isProvider]
     );
   }
@@ -136,7 +136,6 @@ async function main() {
 
     const orderId = uuidv4();
     const completedAt = new Date(Date.now() - daysAgo * 86400000).toISOString();
-    const completedAt = `NOW() - INTERVAL '${daysAgo} days'`;
     await run(
       `INSERT INTO orders (id, service_id, buyer_id, provider_id, status, price_at_order, completed_at, updated_at)
        VALUES (?, ?, ?, ?, 'completed', ?, ?, ?)`,
@@ -186,8 +185,6 @@ async function main() {
         `INSERT INTO conversations (id, participant_a, participant_b, last_message, last_msg_at)
          VALUES (?, ?, ?, ?, ?)`,
         [convId, pA, pB, 'Sure! Send me your code and we can schedule a session.', thirtyMinsAgo]
-         VALUES (?, ?, ?, ?, NOW() - INTERVAL '30 minutes')`,
-        [convId, pA, pB, 'Sure! Send me your code and we can schedule a session.']
       );
 
       const chatMsgs = [

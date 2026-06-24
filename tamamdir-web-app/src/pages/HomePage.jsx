@@ -4,6 +4,7 @@ import { ArrowRight, CheckCircle2, Shield, DollarSign, ThumbsUp, Plus, AlertCirc
 import Navbar from '../components/Navbar'
 import ServiceCard from '../components/ServiceCard'
 import api from '../lib/api'
+import { useAuth } from '../context/AuthContext'
 
 function ServiceCardSkeleton() {
   return (
@@ -19,16 +20,24 @@ function ServiceCardSkeleton() {
 }
 
 export default function HomePage() {
+  const { user } = useAuth()
   const [services, setServices] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api.get('/api/services?limit=4&sort=rating')
+    if (!user?.interests?.length) {
+      setServices([])
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    api.get('/api/services?limit=4&sort=rating&interests=1')
       .then(data => setServices(data.services))
       .catch(err => setError(err.message || 'Failed to load services.'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [user?.interests])
 
   return (
     <div className="min-h-screen bg-white">
@@ -85,10 +94,14 @@ export default function HomePage() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Offered Services</h2>
-              <p className="text-gray-500 text-sm mt-0.5">Quality help from your classmates</p>
+              <p className="text-gray-500 text-sm mt-0.5">
+                {user?.interests?.length
+                  ? 'Picked for you based on your interests'
+                  : 'Quality help from your classmates'}
+              </p>
             </div>
             <Link
-              to="/services"
+              to="/services?interests=1"
               className="flex items-center gap-1 text-sm text-green-primary font-semibold hover:underline"
             >
               View all <ArrowRight className="w-4 h-4" />
@@ -105,7 +118,14 @@ export default function HomePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {loading
               ? Array.from({ length: 4 }).map((_, i) => <ServiceCardSkeleton key={i} />)
-              : services.map(service => <ServiceCard key={service.id} service={service} />)
+              : services.length > 0
+                ? services.map(service => <ServiceCard key={service.id} service={service} />)
+                : (
+                  <div className="col-span-full text-center py-12 text-gray-400">
+                    <p className="font-medium">No services in your interest categories yet.</p>
+                    <p className="text-sm mt-1">Check back soon or browse all services.</p>
+                  </div>
+                )
             }
           </div>
 

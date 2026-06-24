@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Toast from "../components/Toast";
 import { useServices } from "../context/ServicesContext";
@@ -26,7 +26,10 @@ export default function AddNewServicePage() {
   const [price, setPrice] = useState("");
   const [unit, setUnit] = useState(UNITS[0].value);
   const [description, setDescription] = useState("");
+  const [photos, setPhotos] = useState<{ url: string; file: File }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState("Tamamdır! Hizmet yayınlandı.");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -44,22 +47,52 @@ export default function AddNewServicePage() {
       });
   }, []);
 
+  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    const remaining = 4 - photos.length;
+    files.slice(0, remaining).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setPhotos((prev) =>
+          prev.length < 4
+            ? [...prev, { url: ev.target?.result as string, file }]
+            : prev
+        );
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = "";
+  }
+
+  function removePhoto(index: number) {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function handlePublish() {
     if (!title.trim() || !categoryId || !price || saving) return;
     setSaving(true);
     try {
-      await api.post('/api/services', {
+      const created: any = await api.post('/api/services', {
         category_id: categoryId,
         title: title.trim(),
         description: description.trim() || undefined,
         price: Number(price),
         price_unit: unit,
-        delivery_days: 0,
+        delivery_days: 1,
       });
+
+      if (photos.length > 0 && created?.id) {
+        const formData = new FormData();
+        photos.forEach((p) => formData.append("images", p.file));
+        await api.post(`/api/services/${created.id}/images`, formData);
+      }
+
       await refresh();
+      setToastMessage("Tamamdır! Hizmet yayınlandı.");
       setToastVisible(true);
       setTimeout(() => navigate(-1), 1800);
     } catch {
+      setToastMessage("Hizmet yayınlanamadı, tekrar deneyin.");
       setToastVisible(true);
     } finally {
       setSaving(false);
@@ -69,7 +102,7 @@ export default function AddNewServicePage() {
   return (
     <div className="bg-background min-h-screen max-w-md mx-auto">
       <Toast
-        message="Tamamdır! Hizmet yayınlandı."
+        message={toastMessage}
         visible={toastVisible}
         onHide={() => setToastVisible(false)}
       />
@@ -98,16 +131,71 @@ export default function AddNewServicePage() {
 
       <main className="pt-[60px] pb-32 px-margin-mobile">
         <div className="pt-xl space-y-xl">
-          {/* Image Upload Placeholder */}
+          {/* Image Upload */}
           <section>
-            <div className="aspect-video w-full rounded-xl bg-surface-container-high border-2 border-dashed border-outline-variant/50 flex flex-col items-center justify-center gap-sm overflow-hidden active:bg-surface-container-highest transition-colors cursor-pointer">
-              <div className="bg-primary-fixed-dim/30 p-4 rounded-full">
-                <span className="material-symbols-outlined text-primary text-[32px]">add_a_photo</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handlePhotoSelect}
+            />
+            <div className="space-y-sm">
+              <div className="flex items-center justify-between px-1">
+                <p className="font-label-bold text-label-bold text-on-surface-variant">
+                  Hizmet Fotoğrafları
+                </p>
+                <p className="font-label-sm text-label-sm text-on-surface-variant">
+                  {photos.length}/4
+                </p>
               </div>
-              <div className="text-center">
-                <p className="font-label-bold text-label-bold text-on-surface">Hizmet fotoğrafı ekle</p>
-                <p className="font-label-sm text-label-sm text-on-surface-variant">Cihazından yükle</p>
-              </div>
+
+              {photos.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="aspect-video w-full rounded-xl bg-surface-container-high border-2 border-dashed border-outline-variant/50 flex flex-col items-center justify-center gap-sm active:bg-surface-container-highest transition-colors"
+                >
+                  <div className="bg-primary-fixed-dim/30 p-4 rounded-full">
+                    <span className="material-symbols-outlined text-primary text-[32px]">add_a_photo</span>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-label-bold text-label-bold text-on-surface">Fotoğraf ekle</p>
+                    <p className="font-label-sm text-label-sm text-on-surface-variant">En fazla 4 fotoğraf</p>
+                  </div>
+                </button>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {photos.map((p, i) => (
+                    <div key={i} className={`relative rounded-xl overflow-hidden bg-surface-container-highest ${i === 0 && photos.length === 1 ? "col-span-2 aspect-video" : "aspect-square"}`}>
+                      <img src={p.url} alt={`Fotoğraf ${i + 1}`} className="w-full h-full object-cover" />
+                      {i === 0 && (
+                        <span className="absolute top-2 left-2 text-[10px] bg-black/60 text-white px-2 py-0.5 rounded-full font-bold">
+                          Ana
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removePhoto(i)}
+                        className="absolute top-2 right-2 w-7 h-7 bg-black/60 text-white rounded-full flex items-center justify-center active:scale-90 transition-transform"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">close</span>
+                      </button>
+                    </div>
+                  ))}
+                  {photos.length < 4 && (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="aspect-square rounded-xl border-2 border-dashed border-outline-variant/50 bg-surface-container-high flex flex-col items-center justify-center gap-1 active:bg-surface-container-highest transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-primary text-[28px]">add_photo_alternate</span>
+                      <p className="font-label-sm text-label-sm text-on-surface-variant text-xs">Ekle</p>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 

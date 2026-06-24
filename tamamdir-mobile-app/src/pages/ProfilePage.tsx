@@ -1,6 +1,9 @@
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "../components/BottomNav";
+import HeaderActionButtons from "../components/HeaderActionButtons";
 import { useAuth } from "../context/AuthContext";
+import { usePreferences } from "../context/PreferencesContext";
 
 interface SettingsRow {
   icon: string;
@@ -15,8 +18,13 @@ function isIyteStudent(email?: string) {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
+  const { t } = usePreferences();
   const verified = isIyteStudent(user?.email);
+
+  useEffect(() => {
+    refreshUser().catch(() => {});
+  }, [refreshUser]);
 
   function handleLogout() {
     logout();
@@ -24,13 +32,14 @@ export default function ProfilePage() {
   }
 
   const accountRows: SettingsRow[] = [
-    { icon: "person", label: "Kişisel Bilgiler", sub: "Ad, E-posta, Öğrenci No", to: "/account" },
-    { icon: "edit_attributes", label: "Kişiselleştirme", sub: "Tema, Dil, Erişilebilirlik", to: "/personalization" },
+    { icon: "person", label: t("profile.personalInfo"), sub: t("profile.personalInfoSub"), to: "/account" },
+    { icon: "favorite", label: t("profile.favorites"), sub: t("profile.favoritesSub"), to: "/favorites" },
+    { icon: "edit_attributes", label: t("profile.personalization"), sub: t("profile.personalizationSub"), to: "/personalization" },
   ];
 
   const privacyRows: SettingsRow[] = [
-    { icon: "shield", label: "Güvenlik", sub: "Şifre, 2FA, Giriş Cihazları" },
-    { icon: "settings_account_box", label: "Hesap Yönetimi", sub: "Bildirimler, Doğrulama, Veri", to: "/account/settings" },
+    { icon: "shield", label: t("profile.security"), sub: t("profile.securitySub"), to: "/account/security" },
+    { icon: "settings_account_box", label: t("profile.settings"), sub: t("profile.settingsSub"), to: "/account/settings" },
   ];
 
   return (
@@ -38,14 +47,7 @@ export default function ProfilePage() {
       {/* Fixed TopBar */}
       <header className="bg-white flex justify-between items-center w-full px-6 py-3 border-b border-slate-200 shadow-sm sticky top-0 z-50">
         <span className="text-xl font-extrabold text-primary">Tamamdır</span>
-        <div className="flex items-center gap-2">
-          <button className="p-2 hover:bg-slate-50 transition-colors rounded-full">
-            <span className="material-symbols-outlined text-slate-500">notifications</span>
-          </button>
-          <button className="p-2 hover:bg-slate-50 transition-colors rounded-full">
-            <span className="material-symbols-outlined text-slate-500">help</span>
-          </button>
-        </div>
+        <HeaderActionButtons showHelp />
       </header>
 
       <main className="pb-24">
@@ -73,17 +75,17 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
-            <h1 className="font-bold text-xl mb-1">{user?.name || "Kullanıcı"}</h1>
+            <h1 className="font-bold text-xl mb-1">{user?.name || t("profile.user")}</h1>
             <p className="text-sm opacity-80 mb-3">{user?.department} • {user?.year}</p>
             {verified ? (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary-container/20 border border-primary-container/30 rounded-full">
                 <span className="material-symbols-outlined fill-icon text-xs text-primary-fixed">school</span>
-                <span className="text-xs font-bold text-primary-fixed uppercase tracking-wider">Doğrulanmış İYTE Öğrencisi</span>
+                <span className="text-xs font-bold text-primary-fixed uppercase tracking-wider">{t("profile.verifiedBadge")}</span>
               </div>
             ) : (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-surface-container/30 border border-outline-variant/30 rounded-full">
                 <span className="material-symbols-outlined text-xs text-outline">person</span>
-                <span className="text-xs font-bold text-outline uppercase tracking-wider">Kullanıcı</span>
+                <span className="text-xs font-bold text-outline uppercase tracking-wider">{t("profile.user")}</span>
               </div>
             )}
           </div>
@@ -93,13 +95,13 @@ export default function ProfilePage() {
         <section className="px-gutter -mt-6 relative z-20">
           <div className="grid grid-cols-3 gap-3 bg-surface-container-lowest shadow-card rounded-xl p-4 border border-outline-variant/30">
             {[
-              { val: user?.completedServices ?? 0, label: "Tamamlanan" },
-              { val: user?.rating ? user.rating.toFixed(1) : "—", label: "Puan" },
-              { val: user?.activeServices ?? 0, label: "Hizmet" },
+              { val: user?.completedServices ?? 0, labelKey: "profile.statCompleted" as const },
+              { val: user?.rating && user.rating > 0 ? user.rating.toFixed(1) : "—", labelKey: "profile.statRating" as const },
+              { val: user?.activeServices ?? 0, labelKey: "profile.statServices" as const },
             ].map((s, i) => (
               <div key={i} className={`text-center ${i < 2 ? "border-r border-outline-variant/30" : ""}`}>
                 <div className="text-xl font-bold text-primary">{s.val}</div>
-                <div className="text-[10px] font-bold text-secondary uppercase tracking-tight">{s.label}</div>
+                <div className="text-[10px] font-bold text-secondary uppercase tracking-tight">{t(s.labelKey)}</div>
               </div>
             ))}
           </div>
@@ -108,7 +110,7 @@ export default function ProfilePage() {
         <section className="px-gutter pt-8 space-y-6">
           {/* Account & Profile */}
           <div>
-            <h3 className="text-xs font-bold text-secondary px-2 mb-2 uppercase tracking-widest">Hesap & Profil</h3>
+            <h3 className="text-xs font-bold text-secondary px-2 mb-2 uppercase tracking-widest">{t("profile.account")}</h3>
             <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 divide-y divide-outline-variant/10">
               {accountRows.map((row) => (
                 <button
@@ -133,15 +135,15 @@ export default function ProfilePage() {
 
           {/* Services Management */}
           <div>
-            <h3 className="text-xs font-bold text-secondary px-2 mb-2 uppercase tracking-widest">Hizmetlerim</h3>
+            <h3 className="text-xs font-bold text-secondary px-2 mb-2 uppercase tracking-widest">{t("profile.myServices")}</h3>
             <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 p-4">
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
                   <span className="material-symbols-outlined">design_services</span>
                 </div>
                 <div>
-                  <p className="font-bold text-sm text-on-surface">Hizmet Yönetimi</p>
-                  <p className="text-[11px] text-secondary">Sunduklarınızı kontrol edin</p>
+                  <p className="font-bold text-sm text-on-surface">{t("profile.serviceManage")}</p>
+                  <p className="text-[11px] text-secondary">{t("profile.serviceManageSub")}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -150,14 +152,14 @@ export default function ProfilePage() {
                   className="flex items-center justify-center gap-2 py-3 bg-primary-container text-on-primary-container font-bold text-sm rounded-xl active:scale-95 transition-transform"
                 >
                   <span className="material-symbols-outlined text-sm">add_circle</span>
-                  Yeni Ekle
+                  {t("profile.addNew")}
                 </button>
                 <button
                   onClick={() => navigate("/profile/manage")}
                   className="flex items-center justify-center gap-2 py-3 bg-secondary-container text-on-secondary-container font-bold text-sm rounded-xl active:scale-95 transition-transform"
                 >
                   <span className="material-symbols-outlined text-sm">manage_accounts</span>
-                  Yönet
+                  {t("profile.manage")}
                 </button>
               </div>
             </div>
@@ -165,7 +167,7 @@ export default function ProfilePage() {
 
           {/* Privacy */}
           <div>
-            <h3 className="text-xs font-bold text-secondary px-2 mb-2 uppercase tracking-widest">Gizlilik & Güvenlik</h3>
+            <h3 className="text-xs font-bold text-secondary px-2 mb-2 uppercase tracking-widest">{t("profile.privacy")}</h3>
             <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 divide-y divide-outline-variant/10">
               {privacyRows.map((row) => (
                 <button
@@ -190,20 +192,24 @@ export default function ProfilePage() {
 
           {/* Footer Actions */}
           <div className="space-y-3">
-            <button className="w-full py-4 flex items-center justify-center gap-2 text-secondary font-bold bg-white rounded-2xl border border-outline-variant/20 active:bg-slate-50 transition-colors text-sm">
+            <button
+              type="button"
+              onClick={() => navigate("/help")}
+              className="w-full py-4 flex items-center justify-center gap-2 text-secondary font-bold bg-white rounded-2xl border border-outline-variant/20 active:bg-slate-50 transition-colors text-sm"
+            >
               <span className="material-symbols-outlined">help</span>
-              Yardım Merkezi & Destek
+              {t("profile.help")}
             </button>
             <button
               onClick={handleLogout}
               className="w-full py-4 flex items-center justify-center gap-2 text-error font-bold bg-white rounded-2xl border border-error/10 active:bg-error/5 transition-colors text-sm"
             >
               <span className="material-symbols-outlined">logout</span>
-              Çıkış Yap
+              {t("profile.logout")}
             </button>
           </div>
           <div className="text-center pb-8">
-            <p className="text-[10px] text-outline uppercase tracking-widest opacity-60">Tamamdır Sürüm 2.4.0</p>
+            <p className="text-[10px] text-outline uppercase tracking-widest opacity-60">{t("profile.version")}</p>
           </div>
         </section>
       </main>

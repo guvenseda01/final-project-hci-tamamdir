@@ -1,13 +1,47 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import TopBar from "../components/TopBar";
+import NotificationsDropdown from "../components/NotificationsDropdown";
+import ProfileMenuDropdown from "../components/ProfileMenuDropdown";
 import BottomNav from "../components/BottomNav";
 import ChatView from "./ChatView";
+import { usePreferences } from "../context/PreferencesContext";
 import type { Conversation } from "../data/types";
 import api from "../lib/api";
 
+type ServiceContext = { id: string; title: string; price: string; image: string; providerId?: string };
+
+function saveServiceContext(convId: string, ctx: ServiceContext) {
+  try {
+    const all = JSON.parse(localStorage.getItem("conv_service_ctx") ?? "{}");
+    all[convId] = ctx;
+    localStorage.setItem("conv_service_ctx", JSON.stringify(all));
+  } catch {}
+}
+
+function loadServiceContext(convId: string): ServiceContext | null {
+  try {
+    const all = JSON.parse(localStorage.getItem("conv_service_ctx") ?? "{}");
+    return all[convId] ?? null;
+  } catch { return null; }
+}
+
 export default function MessagesPage() {
+  const location = useLocation();
+  const { t, preferences } = usePreferences();
+  const locationState = (location.state as any) ?? {};
   const [search, setSearch] = useState("");
-  const [activeChat, setActiveChat] = useState<Conversation | null>(null);
+
+  const [activeChat, setActiveChat] = useState<Conversation | null>(
+    locationState.openConversation ?? null
+  );
+  const [activeChatService, setActiveChatService] = useState<ServiceContext | null>(() => {
+    if (locationState.serviceContext && locationState.openConversation?.id) {
+      saveServiceContext(locationState.openConversation.id, locationState.serviceContext);
+      return locationState.serviceContext;
+    }
+    return null;
+  });
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
   useEffect(() => {
@@ -20,8 +54,8 @@ export default function MessagesPage() {
           participantName: c.other_name ?? "",
           participantAvatar: c.other_avatar ?? "",
           lastMessage: c.last_message ?? "",
-          lastTime: c.last_message_at
-            ? new Date(c.last_message_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+          lastTime: (c.last_msg_at ?? c.last_message_at)
+            ? new Date(c.last_msg_at ?? c.last_message_at).toLocaleTimeString(preferences.language === "tr" ? "tr-TR" : preferences.language === "de" ? "de-DE" : preferences.language === "es" ? "es-ES" : "en-US", { hour: "2-digit", minute: "2-digit" })
             : "",
           unread: (c.unread_count ?? 0) > 0,
           messages: [],
@@ -30,8 +64,24 @@ export default function MessagesPage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    const convId = locationState.openConversationId as string | undefined;
+    if (!convId || conversations.length === 0) return;
+    const conv = conversations.find((c) => c.id === convId);
+    if (conv) {
+      setActiveChat(conv);
+      setActiveChatService(loadServiceContext(convId));
+    }
+  }, [locationState.openConversationId, conversations]);
+
   if (activeChat) {
-    return <ChatView conversation={activeChat} onBack={() => setActiveChat(null)} />;
+    return (
+      <ChatView
+        conversation={activeChat}
+        serviceContext={activeChatService ?? undefined}
+        onBack={() => { setActiveChat(null); setActiveChatService(null); }}
+      />
+    );
   }
 
   const filtered = conversations.filter(
@@ -44,21 +94,17 @@ export default function MessagesPage() {
     <div className="bg-background min-h-screen max-w-md mx-auto">
       <TopBar
         rightContent={
-          <div className="flex gap-1">
-            <button className="p-2 hover:bg-slate-50 rounded-full transition-colors">
-              <span className="material-symbols-outlined text-slate-500">notifications</span>
-            </button>
-            <button className="p-2 hover:bg-slate-50 rounded-full transition-colors">
-              <span className="material-symbols-outlined text-slate-500">settings</span>
-            </button>
+          <div className="flex items-center gap-1">
+            <NotificationsDropdown />
+            <ProfileMenuDropdown />
           </div>
         }
       />
 
       <main className="pt-20 px-gutter pb-24 max-w-md mx-auto">
         <div className="mb-gutter">
-          <h2 className="font-bold text-xl text-on-surface">Konuşmalar</h2>
-          <p className="text-on-surface-variant text-xs mt-0.5">Hizmet taleplerinizden haberdar olun</p>
+          <h2 className="font-bold text-xl text-on-surface">{t("messages.title")}</h2>
+          <p className="text-on-surface-variant text-xs mt-0.5">{t("messages.sub")}</p>
         </div>
 
         {/* Search */}
@@ -69,7 +115,7 @@ export default function MessagesPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-12 pr-4 py-3 bg-surface-container-low border-none rounded-xl text-body-md focus:ring-2 focus:ring-primary/30 transition-all outline-none"
-            placeholder="Konuşma ara..."
+            placeholder={t("messages.searchPlaceholder")}
           />
         </div>
 
@@ -78,7 +124,7 @@ export default function MessagesPage() {
           {filtered.map((conv) => (
             <div
               key={conv.id}
-              onClick={() => setActiveChat(conv)}
+              onClick={() => { setActiveChat(conv); setActiveChatService(loadServiceContext(conv.id)); }}
               className="flex items-center gap-md p-md bg-surface-container-lowest rounded-xl shadow-card hover:bg-surface-container-low transition-colors cursor-pointer active:scale-[0.98] duration-150"
             >
               <div className="relative flex-shrink-0">

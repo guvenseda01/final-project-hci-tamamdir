@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Search, SlidersHorizontal, AlertCircle } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import ServiceCard from '../components/ServiceCard'
@@ -26,6 +27,9 @@ function ServiceCardSkeleton() {
 }
 
 export default function ServicesPage() {
+  const [searchParams] = useSearchParams()
+  const filterByInterests = searchParams.get('interests') === '1'
+
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState('')   // '' = All (backend slug)
   const [sortBy, setSortBy] = useState('rating')
@@ -51,6 +55,7 @@ export default function ServicesPage() {
         const params = new URLSearchParams({ sort: SORT_MAP[sortBy], limit: '20' })
         if (search.trim()) params.set('q', search.trim())
         if (activeCategory) params.set('category', activeCategory)
+        if (filterByInterests) params.set('interests', '1')
 
         const data = await api.get(`/api/services?${params}`)
         if (!cancelled) setServices(data.services)
@@ -64,7 +69,7 @@ export default function ServicesPage() {
     const delay = search ? 400 : 0
     const id = setTimeout(run, delay)
     return () => { cancelled = true; clearTimeout(id) }
-  }, [search, activeCategory, sortBy])
+  }, [search, activeCategory, sortBy, filterByInterests])
 
   return (
     <div className="min-h-screen bg-white">
@@ -73,7 +78,11 @@ export default function ServicesPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-1">Marketplace</h1>
-          <p className="text-gray-500">Find the perfect campus service from your peers.</p>
+          <p className="text-gray-500">
+            {filterByInterests
+              ? 'Services matching your interests.'
+              : 'Find the perfect campus service from your peers.'}
+          </p>
         </div>
 
         {/* Search + sort */}

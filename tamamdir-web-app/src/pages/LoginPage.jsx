@@ -17,9 +17,15 @@ export default function LoginPage() {
     setError('')
     setSubmitting(true)
     try {
-      await login(email, password)
-      navigate('/home')
+      const data = await login(email, password)
+      navigate(data.user?.interests?.length ? '/home' : '/onboarding')
     } catch (err) {
+      if (err.status === 403 && err.data?.needs_verification) {
+        navigate('/verify-email', {
+          state: { email: err.data.email ?? email.trim() },
+        })
+        return
+      }
       setError(err.message || 'Login failed. Please try again.')
     } finally {
       setSubmitting(false)
